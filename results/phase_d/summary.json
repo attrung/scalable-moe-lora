@@ -1,0 +1,47 @@
+{
+  "phase": "D",
+  "model": "LLaMA 3.2 1B",
+  "seed": 42,
+  "K": 64,
+  "r": 1,
+  "top_k": 16,
+  "note": "All configs use the same LoRA matrices (K*r=64). Only the router varies.",
+  "routers": [
+    {
+      "router": "linear (Phase B ref)",
+      "config": "granularity_r1_k64_linear",
+      "mean_indist_accuracy": 0.5336,
+      "mean_ood_accuracy": null
+    },
+    {
+      "router": "lowrank rdim=16 (Phase B ref)",
+      "config": "granularity_r1_k64",
+      "mean_indist_accuracy": 0.5309,
+      "mean_ood_accuracy": null
+    },
+    {
+      "router": "hierarchical",
+      "config": "granularity_r1_k64_hierarchical",
+      "mean_indist_accuracy": 0.5167,
+      "mean_ood_accuracy": 0.4332
+    },
+    {
+      "router": "product_key",
+      "config": "granularity_r1_k64_product_key",
+      "mean_indist_accuracy": 0.5358,
+      "mean_ood_accuracy": 0.4464
+    },
+    {
+      "router": "cosine",
+      "config": "granularity_r1_k64_cosine",
+      "mean_indist_accuracy": 0.5198,
+      "mean_ood_accuracy": null
+    },
+    {
+      "router": "early_shared",
+      "config": "granularity_r1_k64_early_shared",
+      "mean_indist_accuracy": null,
+      "mean_ood_accuracy": null
+    }
+  ]
+}
