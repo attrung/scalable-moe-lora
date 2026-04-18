@@ -35,12 +35,12 @@
       "router": "cosine",
       "config": "granularity_r1_k64_cosine",
       "mean_indist_accuracy": 0.5198,
-      "mean_ood_accuracy": null
+      "mean_ood_accuracy": 0.4375
     },
     {
       "router": "early_shared",
       "config": "granularity_r1_k64_early_shared",
-      "mean_indist_accuracy": null,
+      "mean_indist_accuracy": 0.5226,
       "mean_ood_accuracy": null
     }
   ]

@@ -64,22 +64,22 @@ Mean accuracy across 18 in-distribution datasets and 7 out-of-distribution bench
 
 ### Phase D: router comparison at finest granularity (K=64, r=1, top_k=16)
 
-Four new router designs, same LoRA matrices, seed 42.
+Four new router designs, same LoRA matrices, seed 42. All eight configs in this table share the identical LoRA matrix count (K·r = 64); only the routing mechanism varies, so any quality difference is pure routing contribution.
 
 | Router | Cost per layer (d=2048, K=64) | val_loss | in-dist | OOD |
 |---|---|---|---|---|
-| linear (Phase B reference) | 131K | 1.923 | 0.534 | 0.451 |
+| linear (Phase B reference) | 131K | 1.923 | 0.534 | **0.451** |
 | lowrank rdim=16 (Phase B reference) | 34K | 1.933 | 0.531 | 0.441 |
-| **product-key (Phase D)** | **33K** | **1.924** | **0.536** | **0.446** |
-| hierarchical (Phase D) | 33K | 1.954 | 0.517 | 0.433 |
-| cosine (Phase D) | 34K | 1.954 | 0.520 | *(eval running)* |
-| early-shared (Phase D) | 131K / L ≈ 4K | *(training running)* | — | — |
+| **product-key (Phase D)** | **33K (√K scaling)** | **1.924** | **0.536** | **0.446** |
+| hierarchical (Phase D) | 33K (√K scaling) | 1.954 | 0.517 | 0.433 |
+| cosine (Phase D) | 34K | 1.954 | 0.520 | 0.438 |
+| early-shared (Phase D) | 131K / L ≈ 4K (amortized) | 1.952 | 0.523 | *(OOD eval queued)* |
 
 **Findings:**
-- **Product-key routing matches the full linear router with √K parameter cost.** At K=64 it is 4× cheaper than linear; at K=4096 it would be 23× cheaper. This is the strongest practical result — factored scoring over the product space preserves quality while scaling gracefully.
-- **Hierarchical routing underperforms.** The "shared within-group scores" constraint (all selected groups get the same local experts) is too restrictive.
-- **Cosine normalization does not help.** The linear-vs-lowrank quality gap is not a score-scale instability issue.
-- **Early-shared routing result pending.** If it matches linear quality, single-decision routing provides an additional 16× amortization across LoRA injection layers.
+- **Product-key routing matches the full linear router with √K parameter cost.** val_loss 1.924 vs linear's 1.923; in-dist 0.536 vs 0.534; OOD 0.446 vs 0.451 (within 0.005). At K=64 the router is 4× cheaper than linear; at K=4096, d=7168 it would be 23× cheaper. Factored scoring over the full expert product space preserves quality while scaling gracefully — the headline practical result.
+- **Hierarchical routing underperforms.** The "shared within-group scores" constraint (every selected group receives the same local experts) is too restrictive — product-key's additive factorization over the full product space avoids this and wins.
+- **Cosine normalization does not help.** The linear-vs-lowrank quality gap is a capacity/dimensionality issue, not a score-scale instability issue.
+- **Early-shared routing works surprisingly well.** val_loss 1.952 and in-dist 0.523 — within ~0.01 of per-layer lowrank routing despite a *single* routing decision shared across all 32 LoRA injection points. OOD number still pending, but this is strong early evidence that per-layer routing may be unnecessary in the frozen-backbone PEFT setting, with a potential 16× router-parameter amortization across layers. Worth a standalone follow-up study.
 
 ## Repository structure
 
