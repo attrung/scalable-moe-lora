@@ -103,6 +103,21 @@ def build_model(config):
     freeze_all_parameters(model)
     inject_lora(model, config)
 
+    # For router_type="early_shared", only the FIRST RoutedLoRA module computes
+    # the routing decision; subsequent modules reuse the cached indices/weights.
+    # Iteration order over named_modules() matches forward execution order in
+    # transformer models (depth-first, registration order).
+    if config.get("lora_type") == "routed" and config.get("router_type") == "early_shared":
+        seen_owner = False
+        for _, m in model.named_modules():
+            if isinstance(m, RoutedLoRA) and m.router_type == "early_shared":
+                if not seen_owner:
+                    seen_owner = True
+                else:
+                    m.is_router_owner = False
+                    if hasattr(m, "router"):
+                        del m.router  # drop the now-unused router params
+
     if config.get("gradient_checkpointing", False):
         model.enable_input_require_grads()
         model.gradient_checkpointing_enable(

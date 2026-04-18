@@ -172,39 +172,47 @@ class TMLoRA(nn.Module):
 class RoutedLoRA(nn.Module):
     """Routed LoRA adapter with shared A/B matrices and top-k expert routing.
 
-    A single shared A: in_features -> (num_experts * rank) and
-    B: (num_experts * rank) -> out_features. Top-k routing selects which of
-    the num_experts groups of `rank` columns to use per token.
+    Six router parameterizations are supported via `router_type`:
 
-    Memory: the intermediate is (batch, seq, num_experts * rank), which is
-    constant at fixed K*r regardless of how K and r are split. This makes
-    the granularity sweep (varying r at fixed K*r) tractable even at high K
-    where the MoELoRA loop implementation OOMs.
+    Baseline routers (Phase B):
+      - "linear":  scores = Linear(d, K)(x). Cost: O(d*K).
+      - "lowrank": scores = (W_query(x)) @ keys.T, W_query: d->rdim,
+                   keys: (K, rdim). Cost: O(d*rdim + K*rdim).
 
-    Two router parameterizations are supported via `router_type`:
-      - "linear":  scores = Linear(in_features, num_experts)(x). Cost: O(d*K).
-      - "lowrank": scores = (W_query(x)) @ keys.T with W_query: d->rdim,
-                   keys: (K, rdim). Cost: O(d*rdim + K*rdim) — roughly
-                   constant in K at modest rdim.
-
-    Both routers produce a (batch, seq, num_experts) score tensor. The
-    forward pass takes top-k, softmax-normalizes, builds a sparse gate
-    tensor, applies it to the per-expert columns of A(x), and projects
-    back through B.
+    Efficient-routing variants (Phase D router comparison study):
+      - "cosine":  same as lowrank but with L2 normalization on q and keys
+                   before the dot product. Same cost as lowrank.
+      - "hierarchical": two-level sqrt(K) routing. router_l1: d->G groups;
+                   router_l2: d->K/G within-group experts (shared across
+                   selected groups). Pick top-g groups, top-(top_k/g) experts
+                   per group. Cost: O(d*sqrt(K)). Requires K and top_k square.
+      - "product_key": Lample et al. 2019. Two scorers (d -> sqrt(K) each).
+                   Score for expert (i,j) = scorer1[i] + scorer2[j]. Top-k
+                   over the K=sqrt(K)*sqrt(K) product space. Cost: O(d*sqrt(K)).
+                   Any expert is reachable (no group bottleneck).
+      - "early_shared": one full linear router (Linear(d, K)) computes routing
+                   from the FIRST RoutedLoRA layer's input; all subsequent
+                   RoutedLoRA modules in the model reuse the same top-k
+                   indices and weights. The owner is designated externally
+                   (build_model in src/model.py); non-owners have their
+                   router deleted. Cost amortized across L layers: O(d*K / L).
     """
+
+    # Class-level cache for early_shared routing. Owner writes; non-owners read.
+    # Overwritten at every owner forward pass.
+    _shared_routing_cache = {"indices": None, "weights": None}
 
     def __init__(self, in_features, out_features, rank=1, alpha=32, dropout=0.0,
                  num_experts=64, top_k=16, router_type="lowrank", router_dim=16,
                  **kwargs):
         super().__init__()
-        assert router_type in ("linear", "lowrank"), \
-            f"router_type must be 'linear' or 'lowrank', got {router_type!r}"
+        assert router_type in (
+            "linear", "lowrank", "cosine", "hierarchical", "product_key", "early_shared"
+        ), f"unknown router_type {router_type!r}"
         self.num_experts = num_experts
         self.rank = rank
         self.top_k = top_k
         self.router_type = router_type
-        # Effective rank per token = top_k * rank; alpha / top_k keeps the
-        # effective scaling constant across the granularity sweep.
         self.scaling = alpha / top_k
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
@@ -212,24 +220,97 @@ class RoutedLoRA(nn.Module):
         self.A = nn.Linear(in_features, bottleneck, bias=False)
         self.B = nn.Linear(bottleneck, out_features, bias=False)
 
-        if router_type == "linear":
+        # Default ownership flag for early_shared. build_model resets this
+        # to False on all but the first early_shared module.
+        self.is_router_owner = True
+
+        if router_type in ("linear", "early_shared"):
             self.router = nn.Linear(in_features, num_experts, bias=False)
-        else:
+        elif router_type in ("lowrank", "cosine"):
             self.W_query = nn.Linear(in_features, router_dim, bias=False)
             self.keys = nn.Parameter(torch.randn(num_experts, router_dim) * 0.01)
+        elif router_type == "hierarchical":
+            G = int(num_experts ** 0.5)
+            assert G * G == num_experts, \
+                f"hierarchical requires square num_experts, got {num_experts}"
+            g_active = int(top_k ** 0.5)
+            assert g_active * g_active == top_k, \
+                f"hierarchical requires square top_k, got {top_k}"
+            self.G = G
+            self.K_per_g = num_experts // G
+            self.g_active = g_active
+            self.k_per_g_active = top_k // g_active
+            self.router_l1 = nn.Linear(in_features, G, bias=False)
+            self.router_l2 = nn.Linear(in_features, self.K_per_g, bias=False)
+        elif router_type == "product_key":
+            sqrt_K = int(num_experts ** 0.5)
+            assert sqrt_K * sqrt_K == num_experts, \
+                f"product_key requires square num_experts, got {num_experts}"
+            self.sqrt_K = sqrt_K
+            self.scorer1 = nn.Linear(in_features, sqrt_K, bias=False)
+            self.scorer2 = nn.Linear(in_features, sqrt_K, bias=False)
 
         nn.init.kaiming_uniform_(self.A.weight)
         nn.init.zeros_(self.B.weight)
 
     def _route(self, x):
-        """Compute top-k indices and softmax weights for the given input."""
+        """Compute top-k indices and softmax weights for the given input.
+
+        Returns (top_k_indices, top_k_weights), both shape (batch, seq, top_k).
+        """
         if self.router_type == "linear":
             scores = self.router(x)
-        else:
+            top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+            return top_k_indices, F.softmax(top_k_scores, dim=-1)
+
+        if self.router_type == "lowrank":
             q = self.W_query(x)
             scores = torch.matmul(q, self.keys.t())
-        top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
-        return top_k_indices, F.softmax(top_k_scores, dim=-1)
+            top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+            return top_k_indices, F.softmax(top_k_scores, dim=-1)
+
+        if self.router_type == "cosine":
+            q = F.normalize(self.W_query(x), dim=-1)
+            k = F.normalize(self.keys, dim=-1)
+            scores = torch.matmul(q, k.t())
+            top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+            return top_k_indices, F.softmax(top_k_scores, dim=-1)
+
+        if self.router_type == "product_key":
+            s1 = self.scorer1(x)
+            s2 = self.scorer2(x)
+            scores = (s1.unsqueeze(-1) + s2.unsqueeze(-2)).flatten(start_dim=-2)
+            top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+            return top_k_indices, F.softmax(top_k_scores, dim=-1)
+
+        if self.router_type == "hierarchical":
+            g_scores = self.router_l1(x)
+            top_g_scores, top_g_idx = torch.topk(g_scores, self.g_active, dim=-1)
+            e_scores = self.router_l2(x)
+            top_e_scores, top_e_idx = torch.topk(e_scores, self.k_per_g_active, dim=-1)
+            g_idx_exp = top_g_idx.unsqueeze(-1).expand(
+                *top_g_idx.shape, self.k_per_g_active)
+            e_idx_exp = top_e_idx.unsqueeze(-2).expand(
+                *top_e_idx.shape[:-1], self.g_active, self.k_per_g_active)
+            global_idx = g_idx_exp * self.K_per_g + e_idx_exp
+            top_k_indices = global_idx.flatten(start_dim=-2)
+            g_scores_exp = top_g_scores.unsqueeze(-1).expand(
+                *top_g_scores.shape, self.k_per_g_active)
+            e_scores_exp = top_e_scores.unsqueeze(-2).expand(
+                *top_e_scores.shape[:-1], self.g_active, self.k_per_g_active)
+            combined = (g_scores_exp + e_scores_exp).flatten(start_dim=-2)
+            return top_k_indices, F.softmax(combined, dim=-1)
+
+        # early_shared: only the owner runs the router; non-owners read cache.
+        if self.is_router_owner:
+            scores = self.router(x)
+            top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+            top_k_weights = F.softmax(top_k_scores, dim=-1)
+            RoutedLoRA._shared_routing_cache["indices"] = top_k_indices
+            RoutedLoRA._shared_routing_cache["weights"] = top_k_weights
+            return top_k_indices, top_k_weights
+        return (RoutedLoRA._shared_routing_cache["indices"],
+                RoutedLoRA._shared_routing_cache["weights"])
 
     def forward(self, x):
         x_dropped = self.dropout(x)
