@@ -1,0 +1,27 @@
+# Granularity sweep: r=1, K=64, top_k=16 — LINEAR router variant.
+# Pair with granularity_r1_k64.yaml (low-rank router rdim=16) for the
+# router comparison axis in Phase B.
+# Linear router has Linear(d, K) params = d*K per LoRA layer, which grows
+# with K — this is the point of comparison against the low-rank router,
+# whose d*rdim + K*rdim params grow much more slowly with K.
+# Matrix params are identical to the lowrank variant (6.816M per layer,
+# constant across the granularity sweep at K*r=64).
+name: llama_granularity_r1_k64_linear
+model_name: meta-llama/Llama-3.2-1B
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: linear
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true
