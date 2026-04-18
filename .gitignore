@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pt
+*.bin
+.DS_Store
+.venv/
+venv/
+*.log
+*.err
+*.out
+slurm-*.out
+slurm-*.err
+.env
+.ipynb_checkpoints/
+hf_cache/
