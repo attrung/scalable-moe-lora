@@ -1,0 +1,25 @@
+# Phase D: cosine-similarity router at finest granularity.
+# Same architecture as lowrank rdim=16 but with L2 normalization on the query
+# projection and expert keys before the dot product. Tests whether the linear-
+# vs-lowrank quality gap is a score-scale stability issue rather than a
+# capacity issue. Same params as lowrank rdim=16; only normalization changes.
+name: llama_granularity_r1_k64_cosine
+model_name: meta-llama/Llama-3.2-1B
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: cosine
+router_dim: 16
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

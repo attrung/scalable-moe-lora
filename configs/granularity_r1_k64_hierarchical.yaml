@@ -1,0 +1,23 @@
+# Phase D: hierarchical router at finest granularity (K=64, r=1, top_k=16).
+# Two-level √K routing: 8 groups, pick top-4 groups, then top-4 experts per
+# group (shared within-group scores). Router cost: O(2d·√K) — scales as √K
+# instead of K, giving ~23x savings vs linear at K=4096, d=7168.
+name: llama_granularity_r1_k64_hierarchical
+model_name: meta-llama/Llama-3.2-1B
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: hierarchical
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true
