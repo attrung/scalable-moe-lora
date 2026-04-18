@@ -166,6 +166,95 @@ class TMLoRA(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# Routed LoRA (unified shared-bottleneck architecture)
+# ---------------------------------------------------------------------------
+
+class RoutedLoRA(nn.Module):
+    """Routed LoRA adapter with shared A/B matrices and top-k expert routing.
+
+    A single shared A: in_features -> (num_experts * rank) and
+    B: (num_experts * rank) -> out_features. Top-k routing selects which of
+    the num_experts groups of `rank` columns to use per token.
+
+    Memory: the intermediate is (batch, seq, num_experts * rank), which is
+    constant at fixed K*r regardless of how K and r are split. This makes
+    the granularity sweep (varying r at fixed K*r) tractable even at high K
+    where the MoELoRA loop implementation OOMs.
+
+    Two router parameterizations are supported via `router_type`:
+      - "linear":  scores = Linear(in_features, num_experts)(x). Cost: O(d*K).
+      - "lowrank": scores = (W_query(x)) @ keys.T with W_query: d->rdim,
+                   keys: (K, rdim). Cost: O(d*rdim + K*rdim) — roughly
+                   constant in K at modest rdim.
+
+    Both routers produce a (batch, seq, num_experts) score tensor. The
+    forward pass takes top-k, softmax-normalizes, builds a sparse gate
+    tensor, applies it to the per-expert columns of A(x), and projects
+    back through B.
+    """
+
+    def __init__(self, in_features, out_features, rank=1, alpha=32, dropout=0.0,
+                 num_experts=64, top_k=16, router_type="lowrank", router_dim=16,
+                 **kwargs):
+        super().__init__()
+        assert router_type in ("linear", "lowrank"), \
+            f"router_type must be 'linear' or 'lowrank', got {router_type!r}"
+        self.num_experts = num_experts
+        self.rank = rank
+        self.top_k = top_k
+        self.router_type = router_type
+        # Effective rank per token = top_k * rank; alpha / top_k keeps the
+        # effective scaling constant across the granularity sweep.
+        self.scaling = alpha / top_k
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
+        bottleneck = num_experts * rank
+        self.A = nn.Linear(in_features, bottleneck, bias=False)
+        self.B = nn.Linear(bottleneck, out_features, bias=False)
+
+        if router_type == "linear":
+            self.router = nn.Linear(in_features, num_experts, bias=False)
+        else:
+            self.W_query = nn.Linear(in_features, router_dim, bias=False)
+            self.keys = nn.Parameter(torch.randn(num_experts, router_dim) * 0.01)
+
+        nn.init.kaiming_uniform_(self.A.weight)
+        nn.init.zeros_(self.B.weight)
+
+    def _route(self, x):
+        """Compute top-k indices and softmax weights for the given input."""
+        if self.router_type == "linear":
+            scores = self.router(x)
+        else:
+            q = self.W_query(x)
+            scores = torch.matmul(q, self.keys.t())
+        top_k_scores, top_k_indices = torch.topk(scores, self.top_k, dim=-1)
+        return top_k_indices, F.softmax(top_k_scores, dim=-1)
+
+    def forward(self, x):
+        x_dropped = self.dropout(x)
+
+        # Bottleneck: (batch, seq, K*r) -> view as (batch, seq, K, r)
+        z = self.A(x_dropped)
+        z = z.view(*z.shape[:-1], self.num_experts, self.rank)
+
+        top_k_indices, top_k_weights = self._route(x_dropped)
+        self._last_routing_indices = top_k_indices.detach()
+
+        # Build (batch, seq, K) gate tensor — zero outside top-k positions
+        gate = torch.zeros(
+            *x_dropped.shape[:-1], self.num_experts,
+            device=x_dropped.device, dtype=top_k_weights.dtype,
+        )
+        gate.scatter_(-1, top_k_indices, top_k_weights)
+
+        # Apply gate per-expert: (batch, seq, K, r) * (batch, seq, K, 1)
+        z_gated = z * gate.unsqueeze(-1)
+        z_flat = z_gated.flatten(start_dim=-2)
+        return self.B(z_flat) * self.scaling
+
+
+# ---------------------------------------------------------------------------
 # Wrapper
 # ---------------------------------------------------------------------------
 
