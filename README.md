@@ -1,19 +1,29 @@
 # Scalable MoE-LoRA: Efficient Routing for Fine-Grained Expert Mixtures
 
-A controlled empirical study of routed Low-Rank Adaptation (LoRA) with mixture-of-experts (MoE) routing, focused on two questions that matter for scaling MoE architectures to frontier model sizes:
+## Motivation
 
-1. **Does expert granularity matter at a fixed parameter budget?** We sweep four granularity points at fixed `K·r = 64` (matrix-param budget) and fixed `top_k·r = 16` (active rank per token), crossed with two router types. Nine runs total.
-2. **Which router mechanism best balances quality and parameter efficiency at fine granularity?** Once finer granularity is shown to help, the router parameter cost — linear routing scales as `O(d·K)` — becomes the bottleneck at high K. We compare six router designs at the finest granularity point (K=64) to find the best quality-efficiency tradeoff.
+At a fixed parameter budget, splitting a mixture-of-experts (MoE) adapter into many small experts (fine granularity) instead of a few large ones is hypothesized to help because it **dramatically increases the number of expert combinations the model can represent per token**. With `K` experts and top-`k` activation, there are `C(K, k)` possible sparse activation patterns: `K=8, k=2` gives 28 combinations, but `K=64, k=16` jumps to roughly 4.9 × 10¹⁴. In principle this combinatorial diversity allows the adapter to specialize far more finely to the input distribution without using any extra active parameters per token.
 
-## Why this matters for MoE in general
+Whether this combinatorial advantage actually translates into better downstream quality, and at what parameter cost on the routing side, is the central question of this study.
 
-The principles studied here are not specific to LoRA adapters. At frontier model scale (e.g., DeepSeek-V3 with K=256 experts at d=7168), routing can consume millions of parameters per layer. The empirical findings transfer directly:
+## Research questions
 
-- **Granularity at fixed budget**: fine-grained sparse activation (many small experts, few active per token) is currently used by DeepSeek, Mixtral, and Qwen-MoE. Our study isolates the granularity axis in a controlled way — same total parameters, same active parameters, only the `K·r` split changes — which no prior work has done cleanly in the PEFT setting.
-- **Router scalability**: a full linear router `Linear(d, K)` becomes impractical at large K. Our comparison of factored routers (product-key, hierarchical, cosine, early-shared) quantifies the quality-efficiency Pareto curve and identifies which compression strategies preserve quality. Product-key routing scales as `O(d·√K)` and matches linear quality in our measurements — a 23× parameter reduction at K=4096, d=7168.
-- **Per-layer vs. shared routing**: the "early-shared" router tests whether routing decisions even need to be made per-layer, motivated by the Omni-Router Transformer finding that shared routing can outperform per-layer routing in deep residual networks. If this holds in the LoRA setting, single-decision routing amortizes the router cost across L layers.
+1. **Does expert granularity matter at a fixed parameter budget?** We sweep four granularity points at fixed `K·r = 64` (LoRA matrix-param budget) and fixed `top_k·r = 16` (active rank per token), crossed with two router types. Nine runs total.
+2. **Which router mechanism best balances quality and parameter efficiency at fine granularity?** Once finer granularity is shown to help, the router parameter cost — a standard linear router scales as `O(d·K)` — becomes the bottleneck at high `K`. We compare six router designs at the finest granularity point (K=64) to find the best quality-efficiency tradeoff.
 
-The LoRA setting gives us a clean experimental platform: the base model is frozen, only the routers and expert matrices are trained, so any quality difference comes directly from the router. The findings then motivate design choices for full MoE pretraining.
+## Why LoRA — and why the findings generalize to full MoE
+
+Running a controlled factorial like this at full model scale (pretraining multi-billion parameter dense MoE models for each cell) would take tens of thousands of GPU-hours. Our compute budget does not support that. Instead we use Low-Rank Adaptation (LoRA) with MoE routing on top of a frozen LLaMA 3.2 1B base. This reduces the cost by several orders of magnitude while preserving the two variables we care about:
+
+- The **granularity axis is identical**: we vary `K` and `r` at fixed `K·r`, exactly as a full-MoE practitioner would choose expert count and hidden dim at fixed active parameter budget. The combinatorial argument above applies to any top-`k`-of-`K` routing mechanism, not just LoRA.
+- The **router axis is identical**: we compare the same router mechanisms (linear, lowrank, factored √K, hierarchical, shared-across-layers) that are used in full MoE pretraining.
+
+The LoRA setting isolates the routing contribution very cleanly — the base model is frozen, so any quality difference between configs comes purely from the adapter and its router. Treat this study as a **cheap, controlled dry-run for full MoE design decisions**:
+
+- If the 1B LoRA results show a strong, consistent signal (as they already do for granularity and are emerging for routing), that is the trigger to commit serious pretraining compute to the winning configuration in a full MoE model.
+- If the signal is weak or inconsistent, it saves us from burning that compute on a speculative design.
+
+At DeepSeek-V3 scale (K=256 experts at d=7168), the router alone can cost ~1.8M parameters per layer and is run on every token — the scalability of the routing mechanism matters directly for inference latency and memory. The router comparison here is designed to identify which mechanisms preserve quality at √K cost, specifically so the findings transfer to frontier MoE pretraining.
 
 ## Current progress
 
@@ -23,8 +33,9 @@ The LoRA setting gives us a clean experimental platform: the base model is froze
 | **B** | Granularity × router factorial (9 configs, seed 42, 18-dataset suite) | ✅ Complete |
 | **C** | OOD evaluation on 7 held-out benchmarks for all 9 Phase B checkpoints | ✅ Complete |
 | **D** | Router comparison study (4 new router types at K=64) | 🚧 3 of 4 trainings complete, early-shared still training |
-| **E** | 3B scale-up of winning router + baseline | ☐ Planned |
-| **F** | Paper writing, beam-search NLG polish, final figures | ☐ Planned |
+| **E** | Multi-seed error bars on winning configs (seeds 0 and 123) | ☐ Planned |
+| **F** | 3B scale-up of winning router + baseline | ☐ Planned |
+| **G** | Paper writing, beam-search NLG polish, final figures | ☐ Planned |
 
 ## Key results so far
 
@@ -151,10 +162,10 @@ CONFIG=granularity_r1_k64 SEED=42 ROUTING=yes sbatch scripts/sbatch_train.sh
 ## Future work
 
 - **Phase D tail**: complete early-shared router training and OOD eval. If early-shared matches linear quality, the paper's scalability argument becomes even stronger.
-- **Phase D-stretch** (if time permits): re-run `granularity_r8_k8_linear` with a load-balancing loss to confirm the routing-collapse failure mode.
-- **Phase E**: scale the winning router to LLaMA 3.2 3B at the finest granularity. Confirm that the granularity and router findings hold at larger model scale.
-- **Phase F**: beam-search polish on NLG eval, BBH re-evaluation with the corrected extractor, final figures and paper draft.
-- **Extension**: integrate Phase D router variants into a full (non-PEFT) MoE pretraining run. The LoRA setting isolates the routing contribution; validating the findings in pretraining confirms the principles generalize.
+- **Phase E — multi-seed error bars**: re-run the winning Phase D router + baseline at seeds 0 and 123, extending the Phase C OOD sweep to the new checkpoints. Multi-seed results turn the current single-seed trend into a statistically defensible claim (mean ± σ), which is what reviewers and a decision to commit full-MoE pretraining compute will both want to see.
+- **Phase F — 3B scale-up**: scale the winning router + baseline to LLaMA 3.2 3B at the finest granularity. Confirms that the granularity and router findings hold at larger model scale; required before extending to full MoE pretraining.
+- **Phase G — paper**: beam-search polish on NLG eval, BBH re-evaluation with the corrected extractor, final figures and paper draft.
+- **Extension to full MoE pretraining**: the LoRA setting here is deliberately chosen as a cheap controlled testbed. If Phases E + F show strong, consistent signals, the natural next step is to integrate the winning router (likely product-key or early-shared) into a full non-PEFT MoE pretraining run at frontier scale.
 
 See `docs/future_work.md` for detailed plans.
 
