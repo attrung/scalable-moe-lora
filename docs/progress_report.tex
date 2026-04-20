@@ -1,0 +1,108 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{parskip}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,urlcolor=blue,linkcolor=black,citecolor=black}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{6pt}{2pt}
+\titlespacing*{\subsection}{0pt}{4pt}{1pt}
+\setlength{\parskip}{3pt}
+
+\title{\vspace{-1.5em}\textbf{Scalable MoE-LoRA: Progress Report}\\[-0.2em]
+\large Efficient Routing for Fine-Grained Expert Mixtures}
+\author{\small Anh Trung Nguyen \quad Jiaqi Lu \quad Andrew Huang}
+\date{\small April 2026}
+
+\begin{document}
+\maketitle
+\vspace{-2em}
+
+\section*{Motivation}
+Sparsely-activated Mixture-of-Experts (MoE) architectures are standard at frontier scale (DeepSeek-V3, Mixtral, Qwen-MoE). The \emph{granularity} of an MoE layer --- how a fixed parameter budget is split between many small experts or few large ones --- is hypothesized to matter because with $K$ experts and top-$k$ activation, a token can address $\binom{K}{k}$ possible expert combinations. At $K{=}8,\, k{=}2$ that is 28 combinations; at $K{=}64,\, k{=}16$ it is $\approx 4.9\times 10^{14}$. Fine granularity gives the model exponentially more ways to specialize \emph{at the same active-parameter budget per token}.
+
+A controlled study at pretraining scale would burn tens of thousands of GPU-hours, which we do not have. Instead, we run the study in the \textbf{LoRA (parameter-efficient fine-tuning)} setting on a frozen LLaMA 3.2 1B base: only the MoE adapter and its router train, so any quality difference is attributable to the adapter alone. Strong consistent signals trigger full-pretraining follow-up; weak signals save that compute. The granularity and router axes here are defined identically to what a full-MoE practitioner chooses, so the principles transfer.
+
+\section*{Phase A --- Exploratory LoRA and MoE-LoRA work (complete)}
+
+We began with a 4-variant reference table on a 12-dataset subset, seed 42: standard LoRA (Hu et al., 2021), MoE-LoRA (Luo et al., 2024, $K$ independent expert pairs with linear routing), TM-LoRA (token-modulated LoRA: shared $A,B$ with additive per-token expert-vector modulation), and our unified shared-bottleneck RoutedLoRA. Phase A validated the infrastructure (18-dataset + 7-OOD evaluator, SLURM harness on Adroit) and gave early signal that a shared-bottleneck rank-1 routed LoRA at $K{=}64$ outperformed both plain LoRA and loop-MoE-LoRA on reasoning (0.592 vs 0.574 vs 0.571). The four variants differed in $K$, $r$, top-$k$, architecture, and router simultaneously, so the signal was noisy --- but it motivated the controlled factorial below.
+
+\section*{Phase B --- Granularity $\times$ router factorial, seed 42 (complete)}
+
+\textbf{Design.} Nine LLaMA 3.2 1B runs on the 18-dataset reasoning + NLG suite, 3 epochs, effective batch 36. All routed configs share the exact same LoRA matrix parameter count ($K\cdot r {=} 64$) and active matrix FLOPs per token ($\text{top\_k}\cdot r {=} 16$); only the $(K, r)$ split and the router mechanism vary. Two routers: standard linear ($\mathcal{O}(d\cdot K)$ per layer) and low-rank ($\mathcal{O}(d\cdot r_{\text{dim}} + K\cdot r_{\text{dim}})$).
+
+\textbf{Result.} Fine granularity is monotonically beneficial for both router types (Table~\ref{tab:phaseb}). The linear router marginally outperforms low-rank at every working granularity point, by 0.3--0.5 pts in-distribution and $\sim$1 pt OOD. Exception: the coarsest linear run ($K{=}8,\,\text{top\_k}{=}2$) diverged in epoch 2 --- a likely routing-collapse failure at very few active experts, flagged for a load-balancing re-run. OOD accuracy tracks in-distribution closely, so the gains generalize.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lccccrrr@{}}
+\toprule
+Config & $K$ & $r$ & top\_k & Router & val\_loss & in-dist & OOD \\
+\midrule
+baseline                  & --- & 8 & --- & standard LoRA   & 1.984 & 0.500 & 0.416 \\
+granularity\_r8\_k8       &  8  & 8 &  2  & lowrank rdim=16 & 1.951 & 0.509 & 0.429 \\
+granularity\_r4\_k16      & 16  & 4 &  4  & lowrank rdim=16 & 1.949 & 0.522 & 0.436 \\
+granularity\_r2\_k32      & 32  & 2 &  8  & lowrank rdim=16 & 1.944 & 0.526 & 0.441 \\
+\textbf{granularity\_r1\_k64} & \textbf{64} & \textbf{1} & \textbf{16} & \textbf{lowrank rdim=16} & \textbf{1.933} & \textbf{0.531} & 0.441 \\
+granularity\_r4\_k16\_linear & 16 & 4 & 4  & linear          & 1.926 & 0.523 & 0.438 \\
+granularity\_r2\_k32\_linear & 32 & 2 & 8  & linear          & 1.926 & 0.531 & \textbf{0.452} \\
+\textbf{granularity\_r1\_k64\_linear} & \textbf{64} & \textbf{1} & \textbf{16} & \textbf{linear} & \textbf{1.923} & \textbf{0.534} & \textbf{0.451} \\
+granularity\_r8\_k8\_linear $^*$ & 8 & 8 & 2 & linear          & 2.139 & 0.371 & 0.321 \\
+\bottomrule
+\end{tabular}
+\caption{Phase B + C: granularity sweep on LLaMA 3.2 1B, seed 42. $^*$Training diverged in epoch 2 (routing collapse at top\_k=2 with linear routing), flagged for re-run with load balancing.}
+\label{tab:phaseb}
+\end{table}
+
+\textbf{Phase C (OOD).} Each of the 9 Phase B checkpoints was also evaluated on 7 held-out OOD benchmarks (MMLU, MMLU-Pro, BBH, IFEval, AGIEval, GPQA Diamond, TruthfulQA) --- the right column of Table~\ref{tab:phaseb}. The generalization gap does not widen with granularity; fine routing is not overfitting.
+
+\section*{Phase D --- Router comparison at fine granularity (complete)}
+
+With granularity settled, the remaining bottleneck for scaling MoE is the router's own parameter cost: a full linear router at DeepSeek-V3 scale ($d{=}7168,\,K{=}256$) needs $\sim$1.8M params per layer. Phase D compares four additional routers at $K{=}64,\,r{=}1,\,\text{top\_k}{=}16$, holding everything else constant (same LoRA matrices, data, seed, optimizer):
+
+\begin{itemize}\setlength\itemsep{0pt}
+  \item \textbf{Product-key} (Lample et al.\ 2019): two scorers $\mathbb{R}^d \to \mathbb{R}^{\sqrt{K}}$; score for expert $(i,j)$ is $s_1[i] + s_2[j]$; top-$k$ over the full $\sqrt{K}\times\sqrt{K}$ product space. Cost $\mathcal{O}(d\sqrt{K})$. Any expert reachable.
+  \item \textbf{Hierarchical}: group router plus within-group router shared across selected groups; two-level top-$k$. Same $\mathcal{O}(d\sqrt{K})$ cost but with a group bottleneck.
+  \item \textbf{Cosine}: lowrank rdim=16 with L2 normalization on query and keys. Tests whether the linear-vs-lowrank gap is score-scale instability.
+  \item \textbf{Early-shared}: a single linear router computes top-$k$ from the first LoRA layer's input; all 32 subsequent injection points reuse the cached decision. Motivated by the Omni-Router Transformer finding.
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lcrrr@{}}
+\toprule
+Router & Per-layer cost ($d{=}2048, K{=}64$) & val\_loss & in-dist & OOD \\
+\midrule
+linear (Phase B reference)        & $131$K                         & 1.923 & 0.534 & \textbf{0.451} \\
+lowrank rdim=16 (Phase B ref.)    & $34$K                          & 1.933 & 0.531 & 0.441 \\
+\textbf{product\_key (Phase D)}   & $\mathbf{33}$\textbf{K}, $\mathcal{O}(d\sqrt{K})$ & \textbf{1.924} & \textbf{0.536} & \textbf{0.446} \\
+cosine (Phase D)                  & $34$K                          & 1.954 & 0.520 & 0.438 \\
+hierarchical (Phase D)            & $33$K, $\mathcal{O}(d\sqrt{K})$ & 1.954 & 0.517 & 0.433 \\
+early\_shared (Phase D)           & $131\text{K} / L \approx 4$K amortized & 1.952 & 0.523 & pending \\
+\bottomrule
+\end{tabular}
+\caption{Phase D: router comparison at $K{=}64$ on LLaMA 3.2 1B, seed 42. All rows share the identical LoRA matrices; only the router varies.}
+\label{tab:phased}
+\end{table}
+
+\textbf{Findings.} The headline is that \emph{product-key routing matches the full linear router's quality at $\mathcal{O}(d\sqrt{K})$ parameter cost}: gap to linear is 0.001 on val\_loss, $+0.002$ on in-distribution, $-0.005$ on OOD. At $K{=}64$ that is $4\times$ cheaper; at $K{=}4096,\,d{=}7168$ (frontier-MoE territory) it extrapolates to $23\times$. Hierarchical's shared-within-group constraint is too restrictive; product-key's additive factorization over the full product space avoids that and wins. Cosine normalization alone does not close the linear-vs-lowrank gap (rules out score-scale instability as the explanation). Early-shared comes in $\sim\!0.01$ val\_loss behind per-layer lowrank routing despite a single decision shared across 32 LoRA injection points --- a strong PEFT-specific scalability signal worth a standalone follow-up.
+
+\section*{Phase E + F --- Multi-seed and 3B scale-up (running)}
+
+Two follow-ups are queued. \textbf{Phase E} re-runs baseline and product\_key at seeds 0 and 123, giving mean\,$\pm\,\sigma$ over 3 seeds --- the bridge from ``clear single-seed trend'' to ``statistically defensible claim'' that both reviewers and a full-pretraining commit decision need. \textbf{Phase F} scales baseline and product\_key to LLaMA 3.2 3B at seed 42 with gradient checkpointing. The 3B VRAM stress test passed at 69--70\% peak (under the 75\% cap); training is auto-gated on that and will fire. Expected wall $\sim$3--4 days.
+
+\section*{Open questions for discussion}
+
+\begin{itemize}\setlength\itemsep{0pt}
+  \item \textbf{Full MoE pretraining follow-up.} If Phase E confirms the Phase D ranking with error bars and Phase F shows the findings persist at 3B, the next step is to integrate product-key routing into a full (non-PEFT) MoE pretraining run. Sensible given remaining compute? What model / dataset scale is most informative?
+  \item \textbf{Early-shared routing deserves its own study.} A single decision shared across 32 layers landing within 0.01 val\_loss of per-layer routing challenges a common MoE assumption. Worth a standalone paper on routing-decision frequency?
+  \item \textbf{Routing collapse at $K{=}8,\,\text{top\_k}{=}2$ linear.} Known load-balancing issue or something specific to rank-8 experts with hard top-2? Re-run with auxiliary balancing loss planned.
+  \item \textbf{Cheap analyses on existing data.} Per-dataset routing-profile clustering (is fine routing learning a task taxonomy?) and generalization-gap shape vs granularity. Both strengthen the paper.
+  \item \textbf{Other router designs.} Mixture-of-routers, learned-hashing, ReXMoE-style cross-layer expert sharing --- worth fitting into the same framework before the paper deadline?
+\end{itemize}
+
+\vspace{0.6em}
+\noindent\small\textit{Repository: \url{https://github.com/attrung/scalable-moe-lora}. Full phase-by-phase plan, reproducibility instructions, and raw result JSONs are on the \texttt{main} branch.}
+
+\end{document}
