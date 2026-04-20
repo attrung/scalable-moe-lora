@@ -7,17 +7,26 @@ This document tracks planned experiments and research directions that follow fro
 - **`granularity_r1_k64_early_shared` training** — currently running, ~7 hours of wall-clock remaining. Tests whether one routing decision, computed from the first LoRA layer's input and reused at all subsequent LoRA injection points, matches per-layer routing quality. Motivated by the Omni-Router Transformer finding that in deep residual networks the hidden state changes only incrementally between layers. If early-shared matches linear quality, single-decision routing provides a 16-32x amortization of router parameters across LoRA layers, making the router cost practically negligible.
 - **`granularity_r1_k64_cosine` OOD eval** — training is complete, OOD eval is queued.
 
-## Phase E — Multi-seed error bars (next after Phase D)
+## Phase E — Multi-seed error bars (running)
 
-Single-seed results establish a trend but cannot distinguish a real effect from seed-specific noise. Before committing compute to 3B scale-up (Phase F) or to a full-MoE pretraining follow-up, we want statistical confidence in the Phase B + D picture.
+Single-seed results establish a trend but cannot distinguish a real effect from seed-specific noise. Phase D's OOD-only numbers (after the eval-JSON aggregation fix) showed that the full linear router beats every √K-cost alternative by 2–4.5 pts OOD, which if real changes the paper from "clean √K equivalence" to "quality-efficiency tradeoff at distribution shift." Before committing compute to 3B scale-up (Phase F) or a full-MoE pretraining follow-up, we want statistical confidence in that ordering.
 
-- Re-run the **winning Phase D router config + baseline** at seeds 0 and 123. Between 2 and 4 additional training runs depending on whether Phase D reveals a single clear winner or a close tie.
-- Extend the 18-dataset in-distribution eval and the 7-benchmark OOD sweep to the new checkpoints.
-- Aggregate into per-config mean ± σ across 3 seeds.
+**Scope (full multi-seed coverage of the Phase D router comparison).** All 6 router configurations at K=64, r=1, top_k=16 are re-run at seeds 0 and 123, plus the baseline. With the seed-42 runs from Phases B and D, this gives 3 seeds × 7 configurations = 21 data points for the router comparison table.
 
-**Done when**: mean ± σ is reported for the winning config and the baseline on both in-dist and OOD, with either a clear > 1σ lead for fine-grained routing or a clear null result.
+Configs re-run at seeds 0 and 123:
+- `reasoning_baseline` (standard LoRA r=8 reference)
+- `granularity_r1_k64_linear` (full linear router)
+- `granularity_r1_k64` (lowrank rdim=16)
+- `granularity_r1_k64_hierarchical`
+- `granularity_r1_k64_product_key`
+- `granularity_r1_k64_cosine`
+- `granularity_r1_k64_early_shared`
 
-**Also in Phase E (opportunistic)**: re-run `granularity_r8_k8_linear` (which diverged at seed 42) with a load-balancing loss term (Shazeer auxiliary loss or DeepSeek's bias-based balancing). Determines whether the epoch-2 training divergence is a reproducible routing-collapse failure mode specific to coarse granularity + linear routing at top_k=2, or a one-off seed effect. Cheap (single run) and paper-relevant.
+Each training is followed by the 18-dataset in-distribution eval and the 7-benchmark OOD sweep via `--dependency=afterany`. Aggregated mean ± σ across 3 seeds becomes the headline comparison table.
+
+**Done when**: 3-seed mean ± σ is reported for every router on both in-distribution and OOD metrics. Either the linear-vs-√K-cost OOD gap is > 1σ (confirming the capacity-vs-efficiency tradeoff story) or it collapses into noise (in which case product-key is the clean efficiency winner with no real OOD cost).
+
+**Also in Phase E (opportunistic)**: re-run `granularity_r8_k8_linear` (which diverged at seed 42) with a load-balancing loss term. Determines whether the epoch-2 training divergence is a reproducible routing-collapse failure mode specific to coarse granularity + linear routing at top_k=2, or a one-off seed effect. Cheap (single run) and paper-relevant.
 
 ## Phase F — 3B scale-up
 
