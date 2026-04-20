@@ -41,44 +41,46 @@ At DeepSeek-V3 scale (K=256 experts at d=7168), the router alone can cost ~1.8M 
 
 ### Phase B: granularity sweep at K·r = 64, top_k·r = 16
 
-Mean accuracy across 18 in-distribution datasets and 7 out-of-distribution benchmarks, LLaMA 3.2 1B, seed 42.
+Mean accuracy across in-distribution datasets (Phase B, accuracy-metric subset of the 18-dataset training suite) and 6 out-of-distribution benchmarks (Phase C: MMLU, MMLU-Pro, BBH, AGIEval, GPQA Diamond, TruthfulQA — IFEval uses BLEU/ROUGE-L and is excluded from the accuracy mean). LLaMA 3.2 1B, seed 42.
 
 | Config | K | r | top_k | Router | val_loss | in-dist | OOD |
 |---|---|---|---|---|---|---|---|
-| baseline | — | 8 | — | standard LoRA | 1.984 | 0.500 | 0.416 |
-| granularity_r8_k8 | 8 | 8 | 2 | lowrank rdim=16 | 1.951 | 0.509 | 0.429 |
-| granularity_r4_k16 | 16 | 4 | 4 | lowrank rdim=16 | 1.949 | 0.522 | 0.436 |
-| granularity_r2_k32 | 32 | 2 | 8 | lowrank rdim=16 | 1.944 | 0.526 | 0.441 |
-| **granularity_r1_k64** | **64** | **1** | **16** | **lowrank rdim=16** | **1.933** | **0.531** | **0.441** |
-| granularity_r4_k16_linear | 16 | 4 | 4 | linear | 1.926 | 0.523 | 0.438 |
-| granularity_r2_k32_linear | 32 | 2 | 8 | linear | 1.926 | 0.531 | **0.452** |
-| **granularity_r1_k64_linear** | **64** | **1** | **16** | **linear** | **1.923** | **0.534** | **0.451** |
-| granularity_r8_k8_linear\* | 8 | 8 | 2 | linear | 2.139 | 0.371 | 0.321 |
+| baseline | — | 8 | — | standard LoRA | 1.984 | 0.500 | 0.207 |
+| granularity_r8_k8 | 8 | 8 | 2 | lowrank rdim=16 | 1.951 | 0.509 | 0.226 |
+| granularity_r4_k16 | 16 | 4 | 4 | lowrank rdim=16 | 1.949 | 0.522 | 0.223 |
+| granularity_r2_k32 | 32 | 2 | 8 | lowrank rdim=16 | 1.944 | 0.526 | 0.230 |
+| granularity_r1_k64 | 64 | 1 | 16 | lowrank rdim=16 | 1.933 | 0.531 | 0.217 |
+| granularity_r4_k16_linear | 16 | 4 | 4 | linear | 1.926 | 0.523 | 0.226 |
+| **granularity_r2_k32_linear** | **32** | **2** | **8** | **linear** | **1.926** | **0.531** | **0.255** |
+| **granularity_r1_k64_linear** | **64** | **1** | **16** | **linear** | **1.923** | **0.534** | **0.245** |
+| granularity_r8_k8_linear\* | 8 | 8 | 2 | linear | 2.139 | 0.371 | 0.197 |
 
 \*`granularity_r8_k8_linear` diverged in epoch 2 (train loss climbed from 2.59 to 3.54). Routing collapse at `top_k=2` with a linear router is a likely cause; a re-run with a load-balancing term is planned.
 
 **Findings:**
-- **Granularity is monotonically beneficial.** For both router types (excluding the single diverged run), finer granularity produces lower val_loss and higher accuracy at constant LoRA parameter budget.
-- **The linear router marginally outperforms the lowrank router** at every working granularity point (+0.3 to +0.5 in-dist, +1 OOD). The gap is due to routing quality: the LoRA matrices are identical between the two routers, only the routing decision mechanism differs.
-- **OOD generalization tracks in-distribution accuracy**, so fine-grained routing is not overfitting to training data.
+- **Granularity is monotonically beneficial in-distribution.** For both router types (excluding the diverged run), finer granularity produces lower val_loss and higher in-dist accuracy at constant LoRA parameter budget.
+- **The linear router outperforms the lowrank router in OOD** by ~2–3 percentage points. In-distribution the gap is much smaller (+0.3 to +0.5 pts), so this is specifically a routing-quality effect that matters most under distribution shift.
+- **OOD accuracies are low in absolute terms** because the 6 benchmarks include hard reasoning tests (BBH, MMLU-Pro, GPQA Diamond) where LLaMA 3.2 1B is near random even without fine-tuning. What matters here is the relative ordering across configs.
 
 ### Phase D: router comparison at finest granularity (K=64, r=1, top_k=16)
 
-Four new router designs, same LoRA matrices, seed 42. All eight configs in this table share the identical LoRA matrix count (K·r = 64); only the routing mechanism varies, so any quality difference is pure routing contribution.
+Four new router designs, same LoRA matrices, seed 42. All eight configs below share the identical LoRA matrix count (K·r = 64); only the routing mechanism varies, so any quality difference is pure routing contribution.
 
 | Router | Cost per layer (d=2048, K=64) | val_loss | in-dist | OOD |
 |---|---|---|---|---|
-| linear (Phase B reference) | 131K | 1.923 | 0.534 | **0.451** |
-| lowrank rdim=16 (Phase B reference) | 34K | 1.933 | 0.531 | 0.441 |
-| **product-key (Phase D)** | **33K (√K scaling)** | **1.924** | **0.536** | **0.446** |
-| hierarchical (Phase D) | 33K (√K scaling) | 1.954 | 0.517 | 0.433 |
-| cosine (Phase D) | 34K | 1.954 | 0.520 | 0.438 |
-| early-shared (Phase D) | 131K / L ≈ 4K (amortized) | 1.952 | 0.523 | *(OOD eval queued)* |
+| linear (Phase B reference) | 131K | 1.923 | 0.534 | **0.245** |
+| lowrank rdim=16 (Phase B reference) | 34K | 1.933 | 0.531 | 0.217 |
+| **product-key (Phase D)** | **33K (√K scaling)** | **1.924** | **0.536** | 0.224 |
+| hierarchical (Phase D) | 33K (√K scaling) | 1.954 | 0.517 | 0.225 |
+| cosine (Phase D) | 34K | 1.954 | 0.520 | 0.230 |
+| early-shared (Phase D) | 131K / L ≈ 4K (amortized) | 1.952 | 0.523 | 0.200 |
 
 **Findings:**
-- **Product-key routing matches the full linear router with √K parameter cost.** val_loss 1.924 vs linear's 1.923; in-dist 0.536 vs 0.534; OOD 0.446 vs 0.451 (within 0.005). At K=64 the router is 4× cheaper than linear; at K=4096, d=7168 it would be 23× cheaper. Factored scoring over the full expert product space preserves quality while scaling gracefully — the headline practical result.
-- **Hierarchical routing underperforms.** The "shared within-group scores" constraint (every selected group receives the same local experts) is too restrictive — product-key's additive factorization over the full product space avoids this and wins.
-- **Cosine normalization does not help.** The linear-vs-lowrank quality gap is a capacity/dimensionality issue, not a score-scale instability issue.
+- **Product-key routing matches linear on val_loss and in-distribution at √K parameter cost.** val_loss 1.924 vs 1.923, in-dist 0.536 vs 0.534 (product-key marginally ahead). On OOD, product-key (0.224) sits between the two linear-cost references (lowrank 0.217, linear 0.245) — better than the low-rank router at the same cost scale, but still ~2 pts behind full linear.
+- **The linear router's OOD advantage is the most robust finding at Phase D.** On the 6 held-out benchmarks, full linear routing (0.245) clearly outperforms every √K-cost alternative. This suggests that for OOD generalization specifically, richer routing capacity still matters; in-distribution, √K-cost routing is sufficient.
+- **Hierarchical routing underperforms on val_loss and in-dist** due to the "shared within-group scores" constraint (every selected group receives the same local experts). Product-key's additive factorization over the full product space avoids this.
+- **Cosine normalization does not close the linear-vs-lowrank gap** on either in-dist or OOD, so the gap is a capacity/dimensionality issue rather than a score-scale instability issue.
+- **Early-shared routing lands close to lowrank on val_loss and in-dist but is the worst on OOD (0.200).** A single routing decision shared across 32 LoRA injection points is *almost* as good as per-layer routing when the test distribution matches training, but clearly loses under distribution shift. This is a meaningful finding on its own: per-layer routing acts as an implicit distribution-shift defense.
 - **Early-shared routing works surprisingly well.** val_loss 1.952 and in-dist 0.523 — within ~0.01 of per-layer lowrank routing despite a *single* routing decision shared across all 32 LoRA injection points. OOD number still pending, but this is strong early evidence that per-layer routing may be unnecessary in the frozen-backbone PEFT setting, with a potential 16× router-parameter amortization across layers. Worth a standalone follow-up study.
 
 ## Repository structure
