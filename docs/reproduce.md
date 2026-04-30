@@ -17,7 +17,7 @@ Total ~370 GPU-hours on a single A100 80 GB. Multi-seed (seeds 0, 123) on the Pa
 ## 1. Environment
 
 ```bash
-git clone https://github.com/<org>/scalable-moe-lora.git
+git clone https://github.com/attrung/scalable-moe-lora.git
 cd scalable-moe-lora
 python3 -m venv venv && source venv/bin/activate
 pip install -e .

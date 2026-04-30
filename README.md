@@ -121,7 +121,7 @@ scalable-moe-lora/
 ### Install
 
 ```bash
-git clone https://github.com/<org>/scalable-moe-lora.git
+git clone https://github.com/attrung/scalable-moe-lora.git
 cd scalable-moe-lora
 
 python3 -m venv venv
@@ -319,7 +319,7 @@ A single-seed pass through Parts A-C is roughly 20 cells × ~16 h = ~320 GPU-hou
   author = {Nguyen, Anh Trung and Lu, Jiaqi and Huang, Andrew},
   title  = {Scalable MoE-LoRA: A Controlled Factorial Study of Mixture-of-Experts Routing for Low-Rank Adaptation},
   year   = {2026},
-  url    = {https://github.com/<org>/scalable-moe-lora},
+  url    = {https://github.com/attrung/scalable-moe-lora},
 }
 ```
 
