@@ -13,7 +13,7 @@ from scalable_moe_lora.evaluate import generate_predictions, compute_metrics as 
 from scalable_moe_lora.model import build_model
 from scalable_moe_lora.data.reasoning import REASONING_DATASET_LOADERS, load_raw_dataset
 from scalable_moe_lora.utils import load_config, load_checkpoint, set_seed
-from scalable_moe_lora.adapters import MoELoRA, RoutedLoRA, DispatchMoELoRA
+from scalable_moe_lora.adapters import MoELoRA
 
 
 def extract_gsm8k_answer(text):
@@ -179,7 +179,7 @@ def collect_routing_stats(model, tokenizer, inputs, device, max_samples=200):
 
     routing_modules = {}
     for name, module in model.named_modules():
-        if isinstance(module, (MoELoRA, RoutedLoRA, DispatchMoELoRA)):
+        if isinstance(module, MoELoRA):
             routing_modules[name] = module
 
     if not routing_modules:
@@ -298,18 +298,11 @@ def evaluate_all_datasets(config_path, checkpoint_path, dataset_names, seed=42,
             print(f"  Collecting routing stats for {ds_name}...")
             indices = collect_routing_stats(model, tokenizer, inputs, device)
             if indices:
-                first_routed = next(
-                    (m for m in model.modules()
-                     if isinstance(m, (RoutedLoRA, DispatchMoELoRA))),
+                first_layer = next(
+                    (m for m in model.modules() if isinstance(m, MoELoRA)),
                     None,
                 )
-                if first_routed:
-                    num_comp = first_routed.num_experts
-                else:
-                    first_moe = next(
-                        (m for m in model.modules() if isinstance(m, MoELoRA)), None
-                    )
-                    num_comp = len(first_moe.experts_A) if first_moe else 0
+                num_comp = first_layer.num_experts if first_layer else 0
 
                 if num_comp > 0:
                     stats = compute_routing_analysis(indices, num_comp)

@@ -4,7 +4,7 @@
 name: granularity_r2_k32_linear
 model_name: meta-llama/Llama-3.2-1B
 
-lora_type: routed
+lora_type: moe
 target_modules: qv
 rank: 2
 alpha: 32

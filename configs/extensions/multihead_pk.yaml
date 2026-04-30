@@ -7,7 +7,7 @@
 name: ext_multihead_pk
 model_name: meta-llama/Llama-3.2-1B
 
-lora_type: routed
+lora_type: moe
 target_modules: qv
 rank: 1
 alpha: 32

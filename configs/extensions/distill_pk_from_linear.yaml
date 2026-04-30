@@ -1,6 +1,6 @@
 # Extension — product-key student distilled from a frozen K=64 linear-router
 # teacher. KL(student_softmax || teacher_softmax) over the K-wide router score
-# distribution at each of the 32 RoutedLoRA modules; coefficient on the KL
+# distribution at each of the 32 MoELoRA modules; coefficient on the KL
 # term is set on the CLI (--distill_coef, default 1.0 in scripts/distill.sh).
 #
 # Tests whether linear's OOD edge transfers into the cheap product-key router
@@ -11,7 +11,7 @@
 name: ext_distill_pk_from_linear
 model_name: meta-llama/Llama-3.2-1B
 
-lora_type: routed
+lora_type: moe
 target_modules: qv
 rank: 1
 alpha: 32

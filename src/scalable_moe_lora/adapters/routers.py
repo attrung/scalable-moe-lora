@@ -4,7 +4,7 @@ Every router takes a hidden state x in R^d and returns (topk_idx, topk_weights):
   - topk_idx:     long tensor, shape (..., top_k) — indices of selected experts in [0, K)
   - topk_weights: float tensor, shape (..., top_k) — softmax-normalized gates summing to 1
 
-Both RoutedLoRA and DispatchMoELoRA delegate to these through `build_router`.
+Both MoELoRA and MoELoRA delegate to these through `build_router`.
 
 Router catalogue:
   - linear            Linear(d, K), O(d*K) params
@@ -22,7 +22,7 @@ Router catalogue:
                       structurally factored (every expert reachable).
   - two_stage_pk      product_key for top-k selection + a separate rank-r_g gate
                       calibration head (W_g: d->r_g, G: K x r_g) for soft-gate
-                      weights. O(d*sqrt(K) + d*r_g + K*r_g). Aimed at the §4.4
+                      weights. O(d*sqrt(K) + d*r_g + K*r_g). Aimed at the gate-fidelity
                       hypothesis that linear's OOD edge is gate-calibration capacity.
   - early_shared      one Linear(d, K) at the first LoRA layer; indices cached and reused
                       at all downstream injection points. Cost amortized across layers.
@@ -144,10 +144,10 @@ class TempProductKeyRouter(nn.Module):
     Parameterized as tau = exp(log_tau) for positivity; log_tau = 0 at init
     reproduces plain product_key. If tau shrinks during training, gates of the
     selected experts grow sharper (max gate value increases, normalized
-    entropy drops). The §4.4 hypothesis predicts that letting tau move freely
+    entropy drops). The gate-fidelity hypothesis predicts that letting tau move freely
     transfers some of linear's gate-fidelity advantage into the cheap router.
 
-    One scalar (log_tau) per RoutedLoRA injection — 32 extra params total at
+    One scalar (log_tau) per MoELoRA injection — 32 extra params total at
     target_modules=qv on a 16-layer model.
     """
 
@@ -178,7 +178,7 @@ class MultiHeadProductKeyRouter(nn.Module):
     Vectorized: a single Linear(d, H*sqrt_K) per scorer instead of H Linear(d, sqrt_K)
     in a ModuleList. The (..., H*sqrt_K) output is reshaped to (..., H, sqrt_K) and
     the per-head outer-sum + average over H is one batched op. One kernel launch per
-    scorer instead of H — at H=4, K=64 over 32 RoutedLoRA modules this removed a
+    scorer instead of H — at H=4, K=64 over 32 MoELoRA modules this removed a
     ~40 % per-step slowdown versus plain product_key (job 3162385 timed out at the
     24 h wall on the loop version).
     """
@@ -215,7 +215,7 @@ class TwoStagePKRouter(nn.Module):
     actually learn what to select.
 
     full_scores returned to the trainer is the product-key K-wide selection score, used
-    only by the aux-loss p_i term in RoutedLoRA.forward.
+    only by the aux-loss p_i term in MoELoRA.forward.
     """
 
     def __init__(self, d, num_experts, top_k, gate_rank=16, **kwargs):

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local launcher for a distillation training run. The student is trained with
 # the standard task loss + load-balance penalty + a KL term that pushes the
-# student's K-wide router softmax toward the teacher's at every RoutedLoRA
+# student's K-wide router softmax toward the teacher's at every MoE-LoRA
 # module.
 #
 # Usage:

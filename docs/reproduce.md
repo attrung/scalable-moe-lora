@@ -45,7 +45,7 @@ moe-lora-correctness
     --max_steps 50 --smoke_with_val
 ```
 
-The correctness test should print forward error `0.00e+00` and gradient error `≤ 1e-5` for both Test 1 (`MoELoRA ≡ DispatchMoELoRA`) and Test 4 (`RoutedLoRA ≡ DispatchMoELoRA`).
+The correctness test should print forward error `0.00e+00` and gradient error `≤ 1e-5` for both Test 1 (`MoELoRA ≡ MoELoRA`) and Test 4 (`MoELoRA ≡ MoELoRA`).
 
 ## 3. Part A — Architecture (4 cells)
 
@@ -93,7 +93,7 @@ for router in linear lowrank cosine hierarchical product_key early_shared; do
 done
 ```
 
-The `early_shared` router has a non-trivial owner-of-the-cache state set up in `model.py:_set_early_shared_owner` — only the first RoutedLoRA injection holds the router parameter, downstream injections read from its cache. The total per-layer cost is therefore ~131K / L ≈ 4K amortized.
+The `early_shared` router has a non-trivial owner-of-the-cache state set up in `model.py:_set_early_shared_owner` — only the first MoELoRA injection holds the router parameter, downstream injections read from its cache. The total per-layer cost is therefore ~131K / L ≈ 4K amortized.
 
 ## 6. Part D — Per-layer routing analysis (CPU, ~30 min)
 

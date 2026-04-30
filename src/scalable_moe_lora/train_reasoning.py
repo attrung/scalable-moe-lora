@@ -85,12 +85,12 @@ def main():
                              "pipeline check instead of the default skip-validation smoke).")
     parser.add_argument("--teacher_config", type=str, default=None,
                         help="Path to teacher YAML for distillation. Teacher must be a "
-                             "RoutedLoRA model with the same K, top_k as the student.")
+                             "MoELoRA model with the same K, top_k as the student.")
     parser.add_argument("--teacher_ckpt", type=str, default=None,
                         help="Path to teacher checkpoint (.pt) for distillation.")
     parser.add_argument("--distill_coef", type=float, default=0.0,
                         help="Coefficient on KL(student || teacher) over the K-wide gate "
-                             "softmax distribution per RoutedLoRA module. 0 disables.")
+                             "softmax distribution per MoELoRA module. 0 disables.")
     parser.add_argument("--resume_from", type=str, default=None,
                         help="Path to a checkpoint (.pt) to resume from. Loads model + "
                              "optimizer state, advances LR scheduler to the saved step, "

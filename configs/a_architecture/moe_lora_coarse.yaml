@@ -1,13 +1,11 @@
 # Part A — MoE-LoRA (coarse). K=8 experts of rank r=8, top_k=2.
-# Same active rank per token as standard r=16 LoRA (k*r = 16). Trained as
-# RoutedLoRA (the production implementation; numerically identical to MoELoRA
-# and DispatchMoELoRA at matched (K, r, top_k); see analysis/correctness.py).
+# Same active rank per token as standard r=16 LoRA (k*r = 16).
 # Switch-Transformer load-balance penalty at coef=0.01 — mandatory at top_k=2
 # (the cell diverges without it under the linear router).
 name: moe_lora_coarse_k8_r8_k2
 model_name: meta-llama/Llama-3.2-1B
 
-lora_type: routed
+lora_type: moe
 target_modules: qv
 rank: 8
 alpha: 32

@@ -1,20 +1,19 @@
-"""Adapter zoo: Standard LoRA + MoE-LoRA + TM-LoRA + RoutedLoRA + DispatchMoELoRA.
+"""Adapter zoo: Standard LoRA + MoE-LoRA + TM-LoRA.
 
-All adapters wrap an nn.Linear via `LinearWithLoRA`. Three implementations of
-the MoE-LoRA architecture (`MoELoRA`, `RoutedLoRA`, `DispatchMoELoRA`) are
-numerically equivalent at matched (K, r, top_k); see
-`scalable_moe_lora.analysis.correctness`. `RoutedLoRA` is the production path
-because it has the smallest activation-memory footprint at large K. Eight
-router types are shared across `RoutedLoRA` and `DispatchMoELoRA` (see
-`routers.py`).
+`MoELoRA` is the shared-bottleneck implementation: one `A: (Kr, d)` and one
+`B: (d, Kr)`, partitioned into K expert groups of rank r and gated at the
+bottleneck. Mathematically identical to the textbook stack-and-gather form
+(Luo et al. 2024) and to a sort-by-expert dispatch form, but with the
+smallest activation-memory footprint at large K.
+
+Routers are pluggable via `build_router(kind, ...)`; nine kinds are supported
+(see `routers.py`).
 """
 
 from .base import LoRA, LinearWithLoRA
-from .moe import MoELoRA
 from .tm import TMLoRA
-from .routed import RoutedLoRA
-from .dispatch import (
-    DispatchMoELoRA,
+from .moe import (
+    MoELoRA,
     collect_aux_loss,
     collect_distill_loss,
     collect_full_scores,
@@ -24,7 +23,7 @@ from .routers import build_router
 
 __all__ = [
     "LoRA", "LinearWithLoRA",
-    "MoELoRA", "TMLoRA", "RoutedLoRA", "DispatchMoELoRA",
+    "TMLoRA", "MoELoRA",
     "collect_aux_loss", "collect_distill_loss",
     "collect_full_scores", "set_teacher_scores",
     "build_router",

@@ -54,7 +54,7 @@ Product-key matches linear on val_loss and in-dist at √K cost. Linear keeps a 
 
 ### Per-module routing summary
 
-For each of the 32 RoutedLoRA modules (16 layers × {q_proj, v_proj}), we walk all 18 in-distribution datasets and record the top-k expert indices per token. The aggregated metrics are then summarized across modules.
+For each of the 32 MoELoRA modules (16 layers × {q_proj, v_proj}), we walk all 18 in-distribution datasets and record the top-k expert indices per token. The aggregated metrics are then summarized across modules.
 
 | Checkpoint               | K  | router        | distinct top-1 modes / module (median) | normalized entropy (median) | dead experts (worst layer) |
 |--------------------------|----|---------------|----------------------------------------|------------------------------|----------------------------|
@@ -73,11 +73,11 @@ Key observations:
 
 2. **Cheap routers are *more* input-conditional at the layer level**, not less. Distinct top-1 modes per layer is 6-7 for the cheap factored routers and 7 for linear. So the 2-3 pt OOD edge cannot come from sharper top-k expert identity.
 
-3. **Early-shared is structurally uniform across layers by design.** All 32 RoutedLoRA injections read a single cached routing decision, so distinct top-1 per layer is exactly 3 *every*where, the pairwise hot-set Jaccard is 1, and the same 4 of 64 experts are dead everywhere. The OOD penalty (0.200 vs 0.217-0.245 for per-layer routers) is the direct cost of this forced uniformity.
+3. **Early-shared is structurally uniform across layers by design.** All 32 MoELoRA injections read a single cached routing decision, so distinct top-1 per layer is exactly 3 *every*where, the pairwise hot-set Jaccard is 1, and the same 4 of 64 experts are dead everywhere. The OOD penalty (0.200 vs 0.217-0.245 for per-layer routers) is the direct cost of this forced uniformity.
 
 ### Gate-magnitude statistics (cheap diagnostic for the OOD-edge hypothesis)
 
-`results/analysis/_gate_magnitudes.json` records, per RoutedLoRA module, the softmax-normalized gate weights at the top-k positions. Pooled across all 32 modules and all 18 datasets:
+`results/analysis/_gate_magnitudes.json` records, per MoELoRA module, the softmax-normalized gate weights at the top-k positions. Pooled across all 32 modules and all 18 datasets:
 
 | Router         | mean gate | std    | mean(max gate) | p95(max gate) | normalized entropy |
 |----------------|-----------|--------|----------------|---------------|--------------------|

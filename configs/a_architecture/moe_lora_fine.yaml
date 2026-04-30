@@ -6,7 +6,7 @@
 name: moe_lora_fine_k64_r1_k16
 model_name: meta-llama/Llama-3.2-1B
 
-lora_type: routed
+lora_type: moe
 target_modules: qv
 rank: 1
 alpha: 32

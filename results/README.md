@@ -41,7 +41,7 @@ The pooled in-distribution accuracy reported in the README and `docs/results.md`
 
 ## Reading an analysis JSON
 
-`results/analysis/<tag>.json` from `per_layer_routing.py`:
+Per-layer routing JSONs (`results/analysis/<tag>.json` from `per_layer_routing.py`):
 
 ```json
 {

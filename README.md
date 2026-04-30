@@ -70,19 +70,16 @@ scalable-moe-lora/
 ├── src/scalable_moe_lora/        # importable Python package
 │   ├── adapters/                 # adapter zoo + router catalogue
 │   │   ├── base.py               #   LoRA, LinearWithLoRA wrapper
-│   │   ├── moe.py                #   MoELoRA reference (Luo et al. 2024)
-│   │   ├── routed.py             #   RoutedLoRA (production, shared bottleneck)
-│   │   ├── dispatch.py           #   DispatchMoELoRA (sort-by-expert dispatch)
+│   │   ├── moe.py                #   MoELoRA (shared-bottleneck implementation)
 │   │   ├── tm.py                 #   TM-LoRA
-│   │   └── routers.py            #   8 router types + build_router()
+│   │   └── routers.py            #   9 router types + build_router()
 │   ├── data/                     # dataset loaders
 │   │   ├── nlg.py                #   NLG primitives (E2E, SAMSum, ...)
 │   │   └── reasoning.py          #   18-dataset training suite + 7 OOD
 │   ├── analysis/                 # routing-behavior analysis
 │   │   ├── per_layer_routing.py  #   per-module top-k indices across datasets
 │   │   ├── gate_magnitudes.py    #   gate sharpness statistics
-│   │   ├── per_layer_summary.py  #   entropy / dead-expert / Jaccard summaries
-│   │   └── correctness.py        #   numerical-equivalence test for the 3 impls
+│   │   └── per_layer_summary.py  #   entropy / dead-expert / Jaccard summaries
 │   ├── model.py                  # LLaMA + adapter injection
 │   ├── train.py                  # training loop (resumable, distillation-aware)
 │   ├── train_reasoning.py        # reasoning-suite training entry point
@@ -132,7 +129,7 @@ huggingface-cli login     # required to download LLaMA 3.2 1B
 huggingface-cli download meta-llama/Llama-3.2-1B
 ```
 
-The package exposes five console scripts after install:
+The package exposes four console scripts after install:
 
 | Command | What it does |
 |---|---|
@@ -140,7 +137,6 @@ The package exposes five console scripts after install:
 | `moe-lora-eval`          | In-dist + (optional) OOD evaluation on a checkpoint |
 | `moe-lora-routing`       | Per-layer top-k routing collection (CPU) |
 | `moe-lora-gates`         | Per-layer gate-magnitude statistics (CPU) |
-| `moe-lora-correctness`   | Numerical-equivalence test for `MoELoRA ≡ RoutedLoRA ≡ DispatchMoELoRA` |
 
 ### Train a single cell
 
@@ -181,13 +177,9 @@ moe-lora-gates   --manifest results/analysis_manifest.yaml
 python -m scalable_moe_lora.analysis.per_layer_summary
 ```
 
-### Verify the three MoE-LoRA implementations are numerically equivalent
+### Equivalence to other MoE-LoRA implementations
 
-```bash
-moe-lora-correctness   # < 30 s, CPU
-```
-
-This checks that `MoELoRA` (Luo et al. 2024 stack-and-gather), `RoutedLoRA` (shared-bottleneck), and `DispatchMoELoRA` (dispatch + bmm) produce identical forward outputs (error `0.00e+00`) and gradients (≤ 1e-5) at matched `(K, r, top_k)`.
+`MoELoRA` here is the **shared-bottleneck** form (single `A: (Kr, d)` and `B: (d, Kr)`, top-k masked at the bottleneck). It is mathematically identical to the textbook stack-and-gather form (Luo et al. 2024) and to a sort-by-expert dispatch form, but uses far less activation memory — `O(B·S·K·r) = O(B·S·64)` at the `K·r=64` budget regardless of how the budget is split between K and r. See `docs/architecture.md` for the full equivalence table.
 
 ## Method
 
@@ -266,7 +258,7 @@ Headline: **product-key matches linear on val_loss and in-distribution accuracy 
 
 ### Part D — Per-layer routing analysis
 
-We open the trained checkpoints of every Part C router and inspect routing behavior per RoutedLoRA module across all 18 in-dist datasets.
+We open the trained checkpoints of every Part C router and inspect routing behavior per MoELoRA module across all 18 in-dist datasets.
 
 **Capacity paradox.** Despite having the largest per-layer router parameter count (131K), the linear router leaves **30 of 64 experts dead** in its worst layer (no other K=64 router has any dead experts in any layer). Median per-layer routing entropy is 0.798 for linear vs 0.960-0.973 for the factored routers. The linear router's extra capacity is spent on imbalance, not on more-informative routing.
 
@@ -297,16 +289,6 @@ Four follow-up cells aimed at the §Part D gate-fidelity hypothesis (still in fl
 | `distill_pk_from_linear` | Direct transfer of the teacher's K-wide gate distribution via KL | queued |
 
 When complete, each extension's eval JSONs land in `results/eval/` and feed into Part C's row of `docs/results.md`.
-
-## Architectural equivalence of the three MoE-LoRA implementations
-
-`MoELoRA`, `RoutedLoRA`, and `DispatchMoELoRA` are three implementations of the same architecture:
-
-- **`MoELoRA`** (Luo et al. 2024 reference): K independent `(A_i, B_i)` LoRA experts; all K computed, top-k gathered. Activation memory `O(B·S·K·d)` — OOMs on 80 GB at `K=64`.
-- **`RoutedLoRA`** (production): one shared `A: (Kr, d)` and `B: (d, Kr)`; the `Kr` bottleneck partitioned into K expert groups of `r` columns each, top-k gate masks the bottleneck. Activation memory `O(B·S·K·r) = O(B·S·64)` regardless of how `K·r` is split.
-- **`DispatchMoELoRA`** (production-style): K independent `(A_i, B_i)` stored as stacked `(K, r, d)` and `(K, d, r)` parameters; sort-by-expert dispatch + 2 batched bmm + scatter-add. Used when expert specialization needs full per-expert weights.
-
-`scalable_moe_lora.analysis.correctness` proves forward error `0.00e+00` and gradient error ≤ 1e-5 at matched `(K, r, top_k)`. We use `RoutedLoRA` for training (smallest activation footprint), and present results as MoE-LoRA in the writeup, consistent with Luo et al. 2024.
 
 ## Reproduction
 

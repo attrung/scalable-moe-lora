@@ -1,6 +1,6 @@
 """Per-layer gate-magnitude analysis for K=64 MoE-LoRA checkpoints (C1).
 
-Tests the §4.4 hypothesis that the linear router's OOD edge comes from
+Tests the hypothesis that the linear router's OOD edge comes from
 higher-fidelity *soft-gate magnitudes* rather than from sharper top-k
 selection. Per module, per dataset, per token, we record the softmax-
 normalized gate weights at the top-k positions and compute:
@@ -15,8 +15,8 @@ normalized gate weights at the top-k positions and compute:
 The hypothesis predicts the linear router's gate distributions are
 sharper / more dataset-dependent than the cheap routers'.
 
-Run on `class` partition (CPU). Reads existing K=64 checkpoints; writes
-a single summary JSON to results/routing_per_layer/_gate_magnitudes.json.
+CPU-only. Reads existing K=64 checkpoints; writes
+a single summary JSON to results/analysis/gate_magnitudes.json.
 
     sbatch scripts/sbatch_per_layer_routing.sh \
         --wrap='python3 scripts/per_layer_gate_magnitudes.py'
@@ -35,7 +35,7 @@ import torch
 from scalable_moe_lora.utils import load_config, load_checkpoint
 from scalable_moe_lora.model import build_model
 from scalable_moe_lora.data.reasoning import load_raw_dataset
-from scalable_moe_lora.adapters import RoutedLoRA
+from scalable_moe_lora.adapters import MoELoRA
 
 
 DATASETS = [
@@ -94,7 +94,7 @@ def collect_for_checkpoint(tag, cfg, ckpt):
     router_type = config.get("router_type", "linear")
     print(f"    K={K} top_k={top_k} router={router_type}", flush=True)
 
-    module_names = [n for n, m in model.named_modules() if isinstance(m, RoutedLoRA)]
+    module_names = [n for n, m in model.named_modules() if isinstance(m, MoELoRA)]
     # per_module[name][dataset] = stats dict
     per_module = {n: {} for n in module_names}
 
@@ -121,7 +121,7 @@ def collect_for_checkpoint(tag, cfg, ckpt):
             with torch.no_grad():
                 _ = model(**enc)
             for name, m in model.named_modules():
-                if isinstance(m, RoutedLoRA) and m._last_topk_weights is not None:
+                if isinstance(m, MoELoRA) and m._last_topk_weights is not None:
                     w = m._last_topk_weights.reshape(-1, m.top_k)
                     ds_buf[name].append(w)
 

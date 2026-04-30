@@ -2,7 +2,7 @@
 
 Consumes the JSONs written by per_layer_routing.py and computes, per model:
 
-    Per-module metrics (each of 64 RoutedLoRA modules):
+    Per-module metrics (each of 64 MoELoRA modules):
       - marginal expert counts (aggregated across 18 datasets)
       - normalized marginal entropy       H(marginal) / log2(K)
       - hot set                            top-(K/8) experts by marginal mass
@@ -89,7 +89,7 @@ def jaccard(a, b):
 
 
 def analyze_module(module_data, K, datasets):
-    """Returns a dict of per-module metrics for a single RoutedLoRA module.
+    """Returns a dict of per-module metrics for a single MoELoRA module.
     module_data is {dataset: {"counter": {eid: count}, "sample_top1s": [...]}}."""
     marginal = Counter()
     for ds in datasets:

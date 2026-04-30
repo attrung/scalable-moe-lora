@@ -7,18 +7,15 @@ output sum.
 
 Supported `lora_type` values:
   standard  — Standard LoRA (Hu et al. 2021)
-  moe       — MoE-LoRA stack-and-gather (Luo et al. 2024); reference impl
+  moe       — MoE-LoRA (shared-bottleneck implementation; nine router types)
   tm        — TM-LoRA (shared A/B + expert-vector table + GELU)
-  routed    — RoutedLoRA (shared-bottleneck routed LoRA, multi-router) — production
-  dispatch  — DispatchMoELoRA (independent experts + sort-by-expert dispatch)
 """
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from scalable_moe_lora.adapters import (
-    LoRA, MoELoRA, TMLoRA, RoutedLoRA, DispatchMoELoRA,
-    LinearWithLoRA,
+    LoRA, MoELoRA, TMLoRA, LinearWithLoRA,
 )
 from scalable_moe_lora.adapters.routers import EarlySharedRouter
 
@@ -27,8 +24,6 @@ LORA_CLASS_MAP = {
     "standard": LoRA,
     "moe":      MoELoRA,
     "tm":       TMLoRA,
-    "routed":   RoutedLoRA,
-    "dispatch": DispatchMoELoRA,
 }
 
 TARGET_MODULES_MAP = {
@@ -52,29 +47,23 @@ def freeze_all_parameters(model):
 
 
 def _get_lora_kwargs(config):
+    """Per-lora-type kwargs from the YAML config."""
     lora_type = config.get("lora_type", "standard")
-    kwargs = {}
     if lora_type == "moe":
-        kwargs["num_experts"] = config.get("num_experts", 8)
-        kwargs["top_k"] = config.get("top_k", 2)
-    elif lora_type == "tm":
-        kwargs["num_experts"] = config.get("num_experts", 8)
-        kwargs["top_k"] = config.get("top_k", 4)
-    elif lora_type == "routed":
-        kwargs["num_experts"] = config.get("num_experts", 64)
-        kwargs["top_k"] = config.get("top_k", 16)
-        kwargs["router_type"] = config.get("router_type", "lowrank")
-        kwargs["router_dim"] = config.get("router_dim", 16)
-        kwargs["num_heads"] = config.get("num_heads", 4)
-        kwargs["gate_rank"] = config.get("gate_rank", 16)
-    elif lora_type == "dispatch":
-        kwargs["num_experts"] = config.get("num_experts", 64)
-        kwargs["top_k"] = config.get("top_k", 16)
-        kwargs["router_type"] = config.get("router_type", "linear")
-        kwargs["router_dim"] = config.get("router_dim", 16)
-        kwargs["num_heads"] = config.get("num_heads", 4)
-        kwargs["gate_rank"] = config.get("gate_rank", 16)
-    return kwargs
+        return {
+            "num_experts": config.get("num_experts", 64),
+            "top_k":       config.get("top_k", 16),
+            "router_type": config.get("router_type", "lowrank"),
+            "router_dim":  config.get("router_dim", 16),
+            "num_heads":   config.get("num_heads", 4),
+            "gate_rank":   config.get("gate_rank", 16),
+        }
+    if lora_type == "tm":
+        return {
+            "num_experts": config.get("num_experts", 8),
+            "top_k":       config.get("top_k", 4),
+        }
+    return {}
 
 
 def inject_lora(model, config):
@@ -110,9 +99,10 @@ def inject_lora(model, config):
 
 
 def _set_early_shared_owner(model):
-    """First EarlySharedRouter (in iteration order) is the owner; non-owners hold a
-    reference to the owner via `_owner_ref` (set without nn.Module registration so
-    the owner's parameters aren't double-counted). Non-owners drop their own router."""
+    """The first EarlySharedRouter (in iteration order) owns the routing decision;
+    every later instance reads the owner's cached `(topk_idx, weights, scores)`.
+    Non-owners drop their own router parameters (set via `object.__setattr__` so
+    the owner's parameters aren't double-counted)."""
     owner = None
     for _, m in model.named_modules():
         if isinstance(m, EarlySharedRouter):

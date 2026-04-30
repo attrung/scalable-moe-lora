@@ -49,7 +49,6 @@ moe-lora-train = "scalable_moe_lora.train_reasoning:main"
 moe-lora-eval = "scalable_moe_lora.evaluate_reasoning:main"
 moe-lora-routing = "scalable_moe_lora.analysis.per_layer_routing:main"
 moe-lora-gates = "scalable_moe_lora.analysis.gate_magnitudes:main"
-moe-lora-correctness = "scalable_moe_lora.analysis.correctness:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,5 +1,5 @@
 # Extension — product-key router + learnable per-module temperature on the
-# top-k softmax (one log_tau scalar per RoutedLoRA injection, 32 total).
+# top-k softmax (one log_tau scalar per MoELoRA injection, 32 total).
 # Aux loss p_i = softmax(full_scores).mean(0) is computed from the *raw*
 # scores so the load-balance penalty does not pull tau back toward 1.
 #
@@ -10,7 +10,7 @@
 name: ext_product_key_temp
 model_name: meta-llama/Llama-3.2-1B
 
-lora_type: routed
+lora_type: moe
 target_modules: qv
 rank: 1
 alpha: 32

@@ -21,25 +21,25 @@ A ∈ ℝ^{r × d}, B ∈ ℝ^{d × r}
 trainable params per layer = 2 d r
 ```
 
-### MoE-LoRA (`lora_type: moe`, `routed`, or `dispatch`)
+### MoE-LoRA (`lora_type: moe`)
 
-K independent LoRA expert pairs `{(A_i, B_i)}` plus a router `R`. For each token `x` the router produces `K` scores, top-k experts are selected, and their scores are softmax-normalized into gates `{g_i}`:
+The textbook MoE-LoRA (Luo et al. 2024) is K independent LoRA expert pairs `{(A_i, B_i)}` plus a router `R`. For each token, `R` produces `K` scores, top-k experts are selected, and their scores are softmax-normalized into gates `{g_i}`:
 
 ```
-out(x) = W_0 x + Σ_{i ∈ top-k}  g_i · (alpha / scaling) · B_i (A_i x)
+out(x) = W_0 x + Σ_{i ∈ top-k}  g_i · (alpha / top_k) · B_i (A_i x)
 trainable params per layer = 2 d K r  + router cost
 active rank per token       = top_k · r
 ```
 
-Three numerically-equivalent implementations (verified by `analysis/correctness.py`):
+The class `MoELoRA` (`adapters/moe.py`) implements this in a **shared-bottleneck form**: a single `A: (Kr, d)` and `B: (d, Kr)`, with the `Kr` bottleneck partitioned into K expert groups of `r` columns each and the gate masked at the bottleneck:
 
-| Class            | Storage                                       | Forward                                | Activation memory |
-|------------------|-----------------------------------------------|----------------------------------------|-------------------|
-| `MoELoRA`        | `K × Linear(d,r)` and `K × Linear(r,d)`       | compute all K, gather top-k            | `O(B·S·K·d)` — OOMs at `K=64` on 80 GB |
-| `RoutedLoRA`     | shared `A: (Kr, d)`, `B: (d, Kr)`             | one matmul, mask top-k blocks at the bottleneck | `O(B·S·K·r)` regardless of split |
-| `DispatchMoELoRA`| stacked `A: (K,r,d)`, `B: (K,d,r)`            | sort-by-expert dispatch + 2 batched bmm | `O(B·S·k·d)` (top-k only) |
+```
+z = A x                          # one matmul, computes all Kr values
+mask top-k blocks of z, scale    # softmax weights from R
+out = (alpha / top_k) · B z      # one matmul; activation memory O(B·S·K·r)
+```
 
-The production training path uses `RoutedLoRA` for its smallest-activation-footprint property (which is also why it survives `K=64` at gradient checkpointing). Dispatch is included as a reference equivalent.
+This is mathematically identical to the stack-and-gather form (compute all K outputs and gather top-k) and to a sort-by-expert dispatch form. We choose the shared-bottleneck form because activation memory is `O(B·S·K·r) = O(B·S·64)` at the `K·r=64` budget regardless of how the budget is split — the alternatives are `O(B·S·K·d)` (stack-and-gather) and `O(B·S·k·d)` (dispatch), both of which would OOM at `K=64` on an 80 GB GPU under gradient checkpointing.
 
 ### TM-LoRA (`lora_type: tm`)
 
@@ -68,7 +68,7 @@ All routers map `x ∈ ℝ^d` to `(top-k indices, top-k softmax weights, optiona
 | `multihead_pk`  | 131K at `H=4`                    | `H` parallel product-key heads, per-head K-wide scores averaged before top-k. Vectorized into one `Linear(d, H·√K)` per scorer. |
 | `two_stage_pk`  | ~67K at `gate_rank=16`           | Stage 1: product-key picks top-k indices. Stage 2: a separate rank-`r_g` gate-calibration head recomputes soft-gate weights at the selected positions. `topk_weights = softmax(select_topk + gate_topk)` so both heads receive task-loss gradient. |
 | `product_key_temp` | 33K + 1 scalar                | `product_key` + a learnable per-module temperature on the top-k softmax. Aux loss uses raw scores so the load-balance penalty does not pull tau back to 1. |
-| `early_shared`  | ≈ 4K amortized                   | One `Linear(d, K)` at the first RoutedLoRA injection; the top-k decision is cached and reused at every later layer (Shleifer & Rush 2025). |
+| `early_shared`  | ≈ 4K amortized                   | One `Linear(d, K)` at the first injection point; the top-k decision is cached and reused at every later layer (Shleifer & Rush 2025). |
 
 ## Load-balance auxiliary loss
 
@@ -80,11 +80,11 @@ f_i = fraction of tokens with expert i in their top-k
 p_i = mean softmax probability of expert i across all tokens
 ```
 
-`L_lb` is summed across all RoutedLoRA / DispatchMoELoRA modules in the model and added to the task loss with coefficient `aux_loss_coef = 0.01`. Mandatory at low `top_k` (`K=8, k=2` diverges without it under the linear router).
+`L_lb` is summed across all MoELoRA modules in the model and added to the task loss with coefficient `aux_loss_coef = 0.01`. Mandatory at low `top_k` (`K=8, k=2` diverges without it under the linear router).
 
 ## Distillation auxiliary loss
 
-When `--teacher_config` and `--teacher_ckpt` are provided to the training entry point, `RoutedLoRA.forward` additionally computes:
+When `--teacher_config` and `--teacher_ckpt` are provided to the training entry point, `MoELoRA.forward` additionally computes:
 
 ```
 L_distill_module = KL(student_softmax(full_scores) || teacher_softmax(full_scores))
@@ -94,7 +94,7 @@ loss             = L_task + aux_loss_coef · L_lb + distill_coef · L_distill_to
 
 The teacher forward is run with `torch.no_grad()` once per micro-batch; per-module `full_scores` are deposited on the matching student modules by qualified name. The teacher state is cleared after each backward pass so a stale dict cannot drive a future step.
 
-The KL is on the K-wide score distribution at every RoutedLoRA module independently. With H = 4 module replicas at 32 injection points, that is 32 KL terms per micro-batch.
+The KL is on the K-wide score distribution at every MoELoRA module independently. With H = 4 module replicas at 32 injection points, that is 32 KL terms per micro-batch.
 
 ## Initialization
 
@@ -103,13 +103,14 @@ The KL is on the K-wide score distribution at every RoutedLoRA module independen
 - Router weights: standard `kaiming_uniform_` for `Linear(d, K)`-style modules; small `randn × 0.01` for explicit key parameters (`lowrank.keys`, `cosine.keys`, `two_stage_pk.gate_keys`).
 - `product_key_temp.log_temperature`: `zeros_` so τ = 1 at init (identical to plain `product_key` at step 0).
 
-## Numerical equivalence
+## Equivalence to other MoE-LoRA implementations
 
-`scripts/run_correctness.sh` (or `moe-lora-correctness`) verifies:
+The shared-bottleneck `MoELoRA` is mathematically identical to two more familiar forms:
 
-| Test | Comparison | Forward error | Gradient error |
-|---|---|---|---|
-| 1 | `MoELoRA` ≡ `DispatchMoELoRA` at matched `(K, r, top_k)` | `0.00e+00` | ≤ 1e-5 |
-| 4 | `RoutedLoRA` ≡ `DispatchMoELoRA` at matched `(K, r, top_k)` | `0.00e+00` | ≤ 1e-5 |
+| Form                       | Storage                                     | Forward                                          | Activation memory |
+|----------------------------|---------------------------------------------|--------------------------------------------------|-------------------|
+| Stack-and-gather (textbook) | `K × Linear(d,r)` and `K × Linear(r,d)`    | compute all K outputs, gather top-k              | `O(B·S·K·d)`      |
+| **Shared-bottleneck (ours)** | shared `A: (Kr, d)`, `B: (d, Kr)`         | one matmul, mask top-k blocks                    | **`O(B·S·K·r)`**  |
+| Sort-by-expert dispatch    | stacked `A: (K,r,d)`, `B: (K,d,r)`          | sort tokens, 2 batched bmm, scatter-add          | `O(B·S·k·d)`      |
 
-By transitivity, all three implementations compute identical functions. The choice between them is purely about activation memory and compute cost.
+Forward output and gradient w.r.t. `A`, `B`, and the router are bit-exact across the three forms at matched `(K, r, top_k)` (verified during development). Choice between them is purely about activation memory and compute cost; we present results as MoE-LoRA throughout, consistent with Luo et al. 2024.

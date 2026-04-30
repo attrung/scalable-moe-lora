@@ -34,10 +34,10 @@ def save_checkpoint(model, optimizer, epoch, step, val_loss, path):
 
 
 def _remap_legacy_router_key(k, model_state):
-    """Remap old RoutedLoRA router key to the current LinearRouter-wrapped path.
+    """Remap old MoELoRA router key to the current LinearRouter-wrapped path.
 
-    Pre-refactor: RoutedLoRA.router was a bare nn.Linear → `...lora.router.weight`.
-    Post-refactor: RoutedLoRA.router is a LinearRouter whose .router is the Linear
+    Pre-refactor: MoELoRA.router was a bare nn.Linear → `...lora.router.weight`.
+    Post-refactor: MoELoRA.router is a LinearRouter whose .router is the Linear
     → `...lora.router.router.weight`. Returns the remapped key if the new path
     exists in the model, else the original key.
     """

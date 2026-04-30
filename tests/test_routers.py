@@ -1,4 +1,4 @@
-"""Sanity tests for the router catalogue and RoutedLoRA forward/backward."""
+"""Sanity tests for the router catalogue and MoELoRA forward/backward."""
 
 import math
 
@@ -6,7 +6,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from scalable_moe_lora.adapters import RoutedLoRA, build_router
+from scalable_moe_lora.adapters import MoELoRA, build_router
 
 
 ROUTERS_K64 = [
@@ -82,10 +82,10 @@ def test_two_stage_pk_grad_flow():
 
 
 def test_routed_lora_forward_backward():
-    """RoutedLoRA forward + backward runs without shape errors and emits aux-loss."""
+    """MoELoRA forward + backward runs without shape errors and emits aux-loss."""
     torch.manual_seed(0)
     d, K, k = 64, 64, 16
-    layer = RoutedLoRA(d, d, rank=1, alpha=32, num_experts=K, top_k=k, router_type="product_key")
+    layer = MoELoRA(d, d, rank=1, alpha=32, num_experts=K, top_k=k, router_type="product_key")
     # Default B init is zeros (LoRA convention); perturb so y is non-trivial for grad flow.
     nn.init.normal_(layer.B.weight, std=0.01)
     x = torch.randn(2, 8, d)

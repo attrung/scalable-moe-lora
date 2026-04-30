@@ -10,7 +10,7 @@
 
 # Slurm wrapper for distillation training. The student is trained with the
 # standard task loss + load-balance penalty + a KL term that pushes the
-# student's K-wide router softmax toward the teacher's at every RoutedLoRA
+# student's K-wide router softmax toward the teacher's at every MoE-LoRA
 # module.
 #
 # Wall is set to 36 h (vs 24 h for plain training) because the per-step cost

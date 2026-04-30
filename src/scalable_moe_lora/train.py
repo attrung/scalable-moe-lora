@@ -298,7 +298,7 @@ def train(config, dataset_names, seed, max_steps=None, smoke_with_val=False,
             labels = batch["labels"].to(device)
 
             # Teacher forward (no grad), capture per-module full_scores, deposit
-            # on the matching student modules so the student's RoutedLoRA.forward
+            # on the matching student modules so the student's MoELoRA.forward
             # can compute KL(student || teacher) on its way through.
             if teacher is not None:
                 with torch.no_grad():
@@ -326,7 +326,7 @@ def train(config, dataset_names, seed, max_steps=None, smoke_with_val=False,
             if teacher is not None:
                 # Clear after backward: gradient_checkpointing (use_reentrant=False)
                 # re-runs the student forward inside backward, and the KL branch in
-                # RoutedLoRA.forward must produce the same set of saved tensors on
+                # MoELoRA.forward must produce the same set of saved tensors on
                 # both passes. Clearing before backward made the recomputed forward
                 # skip the KL branch (saved 64 tensors vs 68 originally) and
                 # tripped torch.utils.checkpoint's integrity assertion.

@@ -1,12 +1,12 @@
 """Per-layer routing collection for MoE-LoRA checkpoints (CPU-only).
 
 For each checkpoint listed in the manifest, walks the 18 in-distribution
-datasets (N samples each) and records top-k routing indices *per RoutedLoRA
+datasets (N samples each) and records top-k routing indices *per MoELoRA
 module* (keyed by its qualified name, e.g. `model.layers.12.self_attn.q_proj.lora`).
 Saves one JSON per run to `results/analysis/<run_tag>.json`. Downstream summary
 is `per_layer_summary.py`.
 
-Why per-module: LLaMA 3.2 1B has 16 layers × {q_proj, v_proj} = 32 RoutedLoRA
+Why per-module: LLaMA 3.2 1B has 16 layers × {q_proj, v_proj} = 32 MoELoRA
 modules; each has its own router weights and learned specialization. Summing
 across them confounds layer-level structure with aggregation artifacts.
 
@@ -26,7 +26,7 @@ import torch
 from scalable_moe_lora.utils import load_config, load_checkpoint
 from scalable_moe_lora.model import build_model
 from scalable_moe_lora.data.reasoning import load_raw_dataset
-from scalable_moe_lora.adapters import RoutedLoRA
+from scalable_moe_lora.adapters import MoELoRA
 
 
 DATASETS = [
@@ -64,7 +64,7 @@ def per_module_usage(model):
     aggregated across all tokens in that forward."""
     out = {}
     for name, m in model.named_modules():
-        if isinstance(m, RoutedLoRA) and m._last_routing_indices is not None:
+        if isinstance(m, MoELoRA) and m._last_routing_indices is not None:
             flat = m._last_routing_indices.flatten().tolist()
             out[name] = Counter(flat)
     return out
@@ -78,7 +78,7 @@ def run_model(tag, label, cfg, ckpt, out_dir):
     model, tok, K, top_k, router_type = load_model_cpu(cfg, ckpt)
     print(f"    loaded in {time.time()-t_load:.1f}s   (K={K}, top_k={top_k}, router={router_type})", flush=True)
 
-    module_names = [n for n, m in model.named_modules() if isinstance(m, RoutedLoRA)]
+    module_names = [n for n, m in model.named_modules() if isinstance(m, MoELoRA)]
     # data[module_name][dataset] = {"counter": {eid: count}, "sample_top1s": [...]}
     data = {m: {} for m in module_names}
     ds_stats = {}
