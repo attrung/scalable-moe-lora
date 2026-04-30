@@ -157,6 +157,7 @@ def run_model(tag, label, cfg, ckpt, out_dir):
 
 def main():
     import argparse
+    global N_SAMPLES
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--manifest", default="results/analysis_manifest.yaml",
                    help="YAML manifest with `models: [{tag, config, checkpoint}]`.")
@@ -165,8 +166,6 @@ def main():
     p.add_argument("--samples", type=int, default=N_SAMPLES,
                    help="Per-dataset samples to walk.")
     args = p.parse_args()
-
-    global N_SAMPLES
     N_SAMPLES = args.samples
 
     if not os.path.exists(args.manifest):
