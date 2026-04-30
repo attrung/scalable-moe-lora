@@ -1,19 +1,14 @@
-"""MoE-LoRA adapter (shared-bottleneck implementation).
+"""MoE-LoRA adapter.
 
-A single shared `A: (Kr, d)` and `B: (d, Kr)`. The `Kr` bottleneck dimensions are
-partitioned into K expert groups of `r` columns each:
+K LoRA experts of rank `r`, with a router that picks `top_k` experts per token
+and softmax-normalizes their scores into gate weights. Implemented as a single
+shared `A: (Kr, d)` and `B: (d, Kr)`, with the `Kr` bottleneck partitioned into
+K expert groups of `r` columns each and the top-k gate applied at the
+bottleneck:
 
-  z = A x                              # one matmul, computes all Kr values
-  apply top-k gate over the K blocks   # zero-out non-selected blocks, scale others
-  out = B (z masked)                   # one matmul; activation memory O(B·S·K·r)
-
-This is mathematically identical to the textbook stack-and-gather form of
-MoE-LoRA (Luo et al. 2024) and to a sort-by-expert dispatch form, but it has
-the smallest activation-memory footprint because it never materializes the
-per-expert outputs separately. Activation memory is `O(B·S·K·r) = O(B·S·64)`
-at the K·r=64 budget, regardless of how the budget is split between K and r.
-
-Scaling: `alpha / top_k` (matches what the granularity and router sweeps used).
+  z = A x                              # one matmul, all Kr values
+  apply top-k gate over the K blocks   # zero non-selected blocks, scale chosen
+  out = (alpha / top_k) · B z          # one matmul; activation memory O(B·S·K·r)
 
 Routing is delegated to `routers.py`; nine router types are supported
 (`build_router`).

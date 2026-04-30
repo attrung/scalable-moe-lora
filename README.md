@@ -70,7 +70,7 @@ scalable-moe-lora/
 ├── src/scalable_moe_lora/        # importable Python package
 │   ├── adapters/                 # adapter zoo + router catalogue
 │   │   ├── base.py               #   LoRA, LinearWithLoRA wrapper
-│   │   ├── moe.py                #   MoELoRA (shared-bottleneck implementation)
+│   │   ├── moe.py                #   MoELoRA (K experts, top-k routed)
 │   │   ├── tm.py                 #   TM-LoRA
 │   │   └── routers.py            #   9 router types + build_router()
 │   ├── data/                     # dataset loaders
@@ -176,10 +176,6 @@ moe-lora-routing --manifest results/analysis_manifest.yaml
 moe-lora-gates   --manifest results/analysis_manifest.yaml
 python -m scalable_moe_lora.analysis.per_layer_summary
 ```
-
-### Equivalence to other MoE-LoRA implementations
-
-`MoELoRA` here is the **shared-bottleneck** form (single `A: (Kr, d)` and `B: (d, Kr)`, top-k masked at the bottleneck). It is mathematically identical to the textbook stack-and-gather form (Luo et al. 2024) and to a sort-by-expert dispatch form, but uses far less activation memory — `O(B·S·K·r) = O(B·S·64)` at the `K·r=64` budget regardless of how the budget is split between K and r. See `docs/architecture.md` for the full equivalence table.
 
 ## Method
 

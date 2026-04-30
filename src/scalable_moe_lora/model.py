@@ -7,7 +7,7 @@ output sum.
 
 Supported `lora_type` values:
   standard  — Standard LoRA (Hu et al. 2021)
-  moe       — MoE-LoRA (shared-bottleneck implementation; nine router types)
+  moe       — MoE-LoRA (K experts of rank r, top-k routed; nine router types)
   tm        — TM-LoRA (shared A/B + expert-vector table + GELU)
 """
 

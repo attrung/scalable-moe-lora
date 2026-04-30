@@ -23,23 +23,23 @@ trainable params per layer = 2 d r
 
 ### MoE-LoRA (`lora_type: moe`)
 
-The textbook MoE-LoRA (Luo et al. 2024) is K independent LoRA expert pairs `{(A_i, B_i)}` plus a router `R`. For each token, `R` produces `K` scores, top-k experts are selected, and their scores are softmax-normalized into gates `{g_i}`:
+K LoRA experts of rank `r` plus a router `R`. For each token `x` the router produces a score for every expert, top-k experts are selected, and their scores are softmax-normalized into gate weights `{g_i}`:
 
 ```
 out(x) = W_0 x + Σ_{i ∈ top-k}  g_i · (alpha / top_k) · B_i (A_i x)
-trainable params per layer = 2 d K r  + router cost
-active rank per token       = top_k · r
+trainable params per layer  = 2 d K r  + router cost
+active rank per token        = top_k · r
 ```
 
-The class `MoELoRA` (`adapters/moe.py`) implements this in a **shared-bottleneck form**: a single `A: (Kr, d)` and `B: (d, Kr)`, with the `Kr` bottleneck partitioned into K expert groups of `r` columns each and the gate masked at the bottleneck:
+`MoELoRA` (`adapters/moe.py`) realises this with a single shared `A: (Kr, d)` and `B: (d, Kr)`, partitioned into K blocks of `r` columns each:
 
 ```
-z = A x                          # one matmul, computes all Kr values
-mask top-k blocks of z, scale    # softmax weights from R
-out = (alpha / top_k) · B z      # one matmul; activation memory O(B·S·K·r)
+z = A x                          # one matmul, all Kr values
+mask top-k blocks of z, scale    # gate weights from R
+out = (alpha / top_k) · B z      # one matmul
 ```
 
-This is mathematically identical to the stack-and-gather form (compute all K outputs and gather top-k) and to a sort-by-expert dispatch form. We choose the shared-bottleneck form because activation memory is `O(B·S·K·r) = O(B·S·64)` at the `K·r=64` budget regardless of how the budget is split — the alternatives are `O(B·S·K·d)` (stack-and-gather) and `O(B·S·k·d)` (dispatch), both of which would OOM at `K=64` on an 80 GB GPU under gradient checkpointing.
+Activation memory is `O(B·S·K·r) = O(B·S·64)` at the `K·r=64` budget regardless of how the budget is split between K and r. With gradient checkpointing on, the same forward fits at `K=64` on a single 80 GB GPU.
 
 ### TM-LoRA (`lora_type: tm`)
 
@@ -103,14 +103,3 @@ The KL is on the K-wide score distribution at every MoELoRA module independently
 - Router weights: standard `kaiming_uniform_` for `Linear(d, K)`-style modules; small `randn × 0.01` for explicit key parameters (`lowrank.keys`, `cosine.keys`, `two_stage_pk.gate_keys`).
 - `product_key_temp.log_temperature`: `zeros_` so τ = 1 at init (identical to plain `product_key` at step 0).
 
-## Equivalence to other MoE-LoRA implementations
-
-The shared-bottleneck `MoELoRA` is mathematically identical to two more familiar forms:
-
-| Form                       | Storage                                     | Forward                                          | Activation memory |
-|----------------------------|---------------------------------------------|--------------------------------------------------|-------------------|
-| Stack-and-gather (textbook) | `K × Linear(d,r)` and `K × Linear(r,d)`    | compute all K outputs, gather top-k              | `O(B·S·K·d)`      |
-| **Shared-bottleneck (ours)** | shared `A: (Kr, d)`, `B: (d, Kr)`         | one matmul, mask top-k blocks                    | **`O(B·S·K·r)`**  |
-| Sort-by-expert dispatch    | stacked `A: (K,r,d)`, `B: (K,d,r)`          | sort tokens, 2 batched bmm, scatter-add          | `O(B·S·k·d)`      |
-
-Forward output and gradient w.r.t. `A`, `B`, and the router are bit-exact across the three forms at matched `(K, r, top_k)` (verified during development). Choice between them is purely about activation memory and compute cost; we present results as MoE-LoRA throughout, consistent with Luo et al. 2024.
