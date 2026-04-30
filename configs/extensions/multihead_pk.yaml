@@ -1,0 +1,29 @@
+# Extension — H-head product-key router. Matches linear's parameter count
+# (131K at H=4, d=2048, K=64) but is structurally factored, so every expert
+# is reachable. Tests whether linear's OOD edge over plain product_key is
+# "rank of the gate function" rather than the linear-ness itself.
+# Forward: H parallel product-key heads → average K-wide scores → top-k.
+# Vectorized: a single Linear(d, H*sqrt_K) per scorer (one kernel launch).
+name: ext_multihead_pk
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: multihead_pk
+num_heads: 4
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

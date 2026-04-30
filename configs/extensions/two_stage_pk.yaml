@@ -1,0 +1,31 @@
+# Extension — two-stage product-key router. Stage 1: product-key picks top-k
+# indices. Stage 2: a separate rank-r_g gate-calibration head recomputes the
+# soft-gate weights at the selected positions. The returned topk_weights are
+# softmax(select_topk + gate_topk) so both heads receive task-loss gradient.
+# Aimed at the "linear's OOD edge = gate-calibration capacity, not selection
+# sharpness" hypothesis (separate the two roles into separate heads).
+# Total: ~67K router params (33K product-key + 34K rank-16 gate head),
+# about half the cost of linear (131K).
+name: ext_two_stage_pk
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: two_stage_pk
+gate_rank: 16
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

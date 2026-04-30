@@ -1,16 +1,53 @@
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+venv/
+env/
+.venv/
+.env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Project artifacts
+results/checkpoints/
+results/logs/*.log
+results/logs/slurm-*
+results/logs/*_error.log
+hf_cache/
 *.pt
 *.bin
-.DS_Store
-.venv/
-venv/
+*.safetensors
+
+# LaTeX build artifacts
+*.aux
 *.log
-*.err
 *.out
-slurm-*.out
-slurm-*.err
-.env
-.ipynb_checkpoints/
-hf_cache/
+*.bbl
+*.blg
+*.toc
+
+# Local environment
+env.sh
+.env.local

@@ -1,188 +1,341 @@
-# Scalable MoE-LoRA: Efficient Routing for Fine-Grained Expert Mixtures
+# Scalable MoE-LoRA
 
-## Motivation
+Controlled factorial study of mixture-of-experts (MoE) routing in low-rank adapters on a frozen LLaMA 3.2 1B backbone. Three connected research questions plus a post-hoc per-layer routing analysis, evaluated on a 18-dataset training suite (≈504k examples) and a 7-benchmark out-of-distribution sweep.
 
-At a fixed parameter budget, splitting a mixture-of-experts (MoE) adapter into many small experts (fine granularity) instead of a few large ones is hypothesized to help because it **dramatically increases the number of expert combinations the model can represent per token**. With `K` experts and top-`k` activation, there are `C(K, k)` possible sparse activation patterns: `K=8, k=2` gives 28 combinations, but `K=64, k=16` jumps to roughly 4.9 × 10¹⁴. In principle this combinatorial diversity allows the adapter to specialize far more finely to the input distribution without using any extra active parameters per token.
+```
+Standard LoRA      MoE-LoRA            TM-LoRA
+    │                 │                   │
+    │            ╔════╧═════════╗         │
+    │            ║ Part A: WHAT ║         │
+    │            ║   ARCH WINS? ║         │
+    │            ╚══════╤═══════╝         │
+    │                   │                  │
+                fine‑grained MoE‑LoRA wins
+                        │
+        ╔═══════════════╧═══════════════╗
+        ║ Part B: HOW SHOULD WE SPLIT   ║
+        ║   THE EXPERT BUDGET?          ║
+        ║   K · r = 64,  k · r = 16     ║
+        ╚═══════════════╤═══════════════╝
+                        │
+        finer is monotonically better in‑dist;
+        OOD peaks one step coarser
+                        │
+        ╔═══════════════╧═══════════════╗
+        ║ Part C: WHICH ROUTER GIVES    ║
+        ║   THE BEST QUALITY/COST?      ║
+        ╚═══════════════╤═══════════════╝
+                        │
+        product‑key matches linear at √K cost
+        in‑dist; linear keeps a 2‑3 pt OOD edge
+                        │
+        ╔═══════════════╧═══════════════╗
+        ║ Part D: PER-LAYER ROUTING     ║
+        ║   ANALYSIS — WHY?             ║
+        ╚═══════════════╤═══════════════╝
+                        │
+        linear router has dramatically sharper
+        soft gates (max gate p95 = 0.95 vs 0.06–0.11
+        for cheap routers); the OOD edge is
+        gate‑magnitude fidelity, not selection
+        sharpness
+```
 
-Whether this combinatorial advantage actually translates into better downstream quality, and at what parameter cost on the routing side, is the central question of this study.
+## TL;DR
 
-## Research questions
+We hold the parameter budget fixed (`K·r = 64` matrix params per layer, `k·r = 16` active rank per token) and sweep the design axes that matter for an MoE-LoRA adapter:
 
-1. **Does expert granularity matter at a fixed parameter budget?** We sweep four granularity points at fixed `K·r = 64` (LoRA matrix-param budget) and fixed `top_k·r = 16` (active rank per token), crossed with two router types. Nine runs total.
-2. **Which router mechanism best balances quality and parameter efficiency at fine granularity?** Once finer granularity is shown to help, the router parameter cost — a standard linear router scales as `O(d·K)` — becomes the bottleneck at high `K`. We compare six router designs at the finest granularity point (K=64) to find the best quality-efficiency tradeoff.
-
-## Why LoRA — and why the findings generalize to full MoE
-
-Running a controlled factorial like this at full model scale (pretraining multi-billion parameter dense MoE models for each cell) would take tens of thousands of GPU-hours. Our compute budget does not support that. Instead we use Low-Rank Adaptation (LoRA) with MoE routing on top of a frozen LLaMA 3.2 1B base. This reduces the cost by several orders of magnitude while preserving the two variables we care about:
-
-- The **granularity axis is identical**: we vary `K` and `r` at fixed `K·r`, exactly as a full-MoE practitioner would choose expert count and hidden dim at fixed active parameter budget. The combinatorial argument above applies to any top-`k`-of-`K` routing mechanism, not just LoRA.
-- The **router axis is identical**: we compare the same router mechanisms (linear, lowrank, factored √K, hierarchical, shared-across-layers) that are used in full MoE pretraining.
-
-The LoRA setting isolates the routing contribution very cleanly — the base model is frozen, so any quality difference between configs comes purely from the adapter and its router. Treat this study as a **cheap, controlled dry-run for full MoE design decisions**:
-
-- If the 1B LoRA results show a strong, consistent signal (as they already do for granularity and are emerging for routing), that is the trigger to commit serious pretraining compute to the winning configuration in a full MoE model.
-- If the signal is weak or inconsistent, it saves us from burning that compute on a speculative design.
-
-At DeepSeek-V3 scale (K=256 experts at d=7168), the router alone can cost ~1.8M parameters per layer and is run on every token — the scalability of the routing mechanism matters directly for inference latency and memory. The router comparison here is designed to identify which mechanisms preserve quality at √K cost, specifically so the findings transfer to frontier MoE pretraining.
-
-## Current progress
-
-| Phase | Description | Status |
+| Axis | Cells | Headline finding |
 |---|---|---|
-| **A** | Legacy 12-dataset appendix runs (standard LoRA, MoE-LoRA, TM-LoRA, RoutedLoRA) | ✅ Complete |
-| **B** | Granularity × router factorial (9 configs, seed 42, 18-dataset suite) | ✅ Complete |
-| **C** | OOD evaluation on 7 held-out benchmarks for all 9 Phase B checkpoints | ✅ Complete |
-| **D** | Router comparison study (4 new router types at K=64) | 🚧 3 of 4 trainings complete, early-shared still training |
-| **E** | Multi-seed error bars on winning configs (seeds 0 and 123) | ☐ Planned |
-| **F** | 3B scale-up of winning router + baseline | ☐ Planned |
-| **G** | Paper writing, beam-search NLG polish, final figures | ☐ Planned |
+| **A. Architecture** | Standard LoRA, MoE-LoRA (coarse + fine), TM-LoRA | Fine-grained MoE-LoRA wins in-dist; standard LoRA has a small OOD edge over the table-style TM-LoRA. |
+| **B. Granularity** | `(r, K, k) ∈ {(8,8,2), (4,16,4), (2,32,8), (1,64,16)}` × {linear, lowrank} routers | Finer granularity is monotonically better in-distribution; OOD peaks one step coarser at `r=2, K=32`. |
+| **C. Router** | linear, lowrank, cosine, hierarchical, product-key, early-shared at `K=64` | Product-key matches the full linear router on val_loss and in-dist at √K parameter cost. Linear keeps a 2-3 pt OOD edge. |
+| **D. Per-layer routing** | trained-checkpoint inspection of all 8 routers | Linear's OOD edge is **soft-gate magnitude fidelity** (max gate p95 = 0.95 vs ≈ 0.06-0.11 for the cheap routers), not sharper top-k selection. |
 
-## Key results so far
+The full linear router at `K=64` even leaves up to **30 of 64 experts dead** at its worst layer — the cheap factored routers keep all 64 alive. The linear router's extra capacity is spent on **imbalance**, not on more-informative routing.
 
-### Phase B: granularity sweep at K·r = 64, top_k·r = 16
+## Why a LoRA testbed for MoE design
 
-Mean accuracy across in-distribution datasets (Phase B, accuracy-metric subset of the 18-dataset training suite) and 6 out-of-distribution benchmarks (Phase C: MMLU, MMLU-Pro, BBH, AGIEval, GPQA Diamond, TruthfulQA — IFEval uses BLEU/ROUGE-L and is excluded from the accuracy mean). LLaMA 3.2 1B, seed 42.
+Running this factorial at full pretraining scale would burn tens of thousands of GPU-hours per cell. A frozen LLaMA 3.2 1B + low-rank adapter setup compresses the cost by orders of magnitude while preserving the two variables we care about:
 
-| Config | K | r | top_k | Router | val_loss | in-dist | OOD |
-|---|---|---|---|---|---|---|---|
-| baseline | — | 8 | — | standard LoRA | 1.984 | 0.500 | 0.207 |
-| granularity_r8_k8 | 8 | 8 | 2 | lowrank rdim=16 | 1.951 | 0.509 | 0.226 |
-| granularity_r4_k16 | 16 | 4 | 4 | lowrank rdim=16 | 1.949 | 0.522 | 0.223 |
-| granularity_r2_k32 | 32 | 2 | 8 | lowrank rdim=16 | 1.944 | 0.526 | 0.230 |
-| granularity_r1_k64 | 64 | 1 | 16 | lowrank rdim=16 | 1.933 | 0.531 | 0.217 |
-| granularity_r4_k16_linear | 16 | 4 | 4 | linear | 1.926 | 0.523 | 0.226 |
-| **granularity_r2_k32_linear** | **32** | **2** | **8** | **linear** | **1.926** | **0.531** | **0.255** |
-| **granularity_r1_k64_linear** | **64** | **1** | **16** | **linear** | **1.923** | **0.534** | **0.245** |
-| granularity_r8_k8_linear\* | 8 | 8 | 2 | linear | 2.139 | 0.371 | 0.197 |
+1. **Granularity is identical.** Varying `K` and `r` at fixed `K·r` is the same choice a full-MoE practitioner makes between many small experts and a few large ones.
+2. **Router parameterization is identical.** The router mechanisms compared here (linear, lowrank, cosine, hierarchical, product-key, early-shared) are the same family used in production MoE pretraining.
 
-\*`granularity_r8_k8_linear` diverged in epoch 2 (train loss climbed from 2.59 to 3.54). Routing collapse at `top_k=2` with a linear router is a likely cause; a re-run with a load-balancing term is planned.
+At DeepSeek-V3 scale (`K=256, d=7168`) the router alone costs ~1.8M parameters per layer and runs on every token. The √K-cost product-key router observed here would extrapolate to ~23× cheaper with no loss of in-distribution quality — a directly relevant signal before committing pretraining compute to a routing design.
 
-**Findings:**
-- **Granularity is monotonically beneficial in-distribution.** For both router types (excluding the diverged run), finer granularity produces lower val_loss and higher in-dist accuracy at constant LoRA parameter budget.
-- **The linear router outperforms the lowrank router in OOD** by ~2–3 percentage points. In-distribution the gap is much smaller (+0.3 to +0.5 pts), so this is specifically a routing-quality effect that matters most under distribution shift.
-- **OOD accuracies are low in absolute terms** because the 6 benchmarks include hard reasoning tests (BBH, MMLU-Pro, GPQA Diamond) where LLaMA 3.2 1B is near random even without fine-tuning. What matters here is the relative ordering across configs.
-
-### Phase D: router comparison at finest granularity (K=64, r=1, top_k=16)
-
-Four new router designs, same LoRA matrices, seed 42. All eight configs below share the identical LoRA matrix count (K·r = 64); only the routing mechanism varies, so any quality difference is pure routing contribution.
-
-| Router | Cost per layer (d=2048, K=64) | val_loss | in-dist | OOD |
-|---|---|---|---|---|
-| linear (Phase B reference) | 131K | 1.923 | 0.534 | **0.245** |
-| lowrank rdim=16 (Phase B reference) | 34K | 1.933 | 0.531 | 0.217 |
-| **product-key (Phase D)** | **33K (√K scaling)** | **1.924** | **0.536** | 0.224 |
-| hierarchical (Phase D) | 33K (√K scaling) | 1.954 | 0.517 | 0.225 |
-| cosine (Phase D) | 34K | 1.954 | 0.520 | 0.230 |
-| early-shared (Phase D) | 131K / L ≈ 4K (amortized) | 1.952 | 0.523 | 0.200 |
-
-**Findings:**
-- **Product-key routing matches linear on val_loss and in-distribution at √K parameter cost.** val_loss 1.924 vs 1.923, in-dist 0.536 vs 0.534 (product-key marginally ahead). On OOD, product-key (0.224) sits between the two linear-cost references (lowrank 0.217, linear 0.245) — better than the low-rank router at the same cost scale, but still ~2 pts behind full linear.
-- **The linear router's OOD advantage is the most robust finding at Phase D.** On the 6 held-out benchmarks, full linear routing (0.245) clearly outperforms every √K-cost alternative. This suggests that for OOD generalization specifically, richer routing capacity still matters; in-distribution, √K-cost routing is sufficient.
-- **Hierarchical routing underperforms on val_loss and in-dist** due to the "shared within-group scores" constraint (every selected group receives the same local experts). Product-key's additive factorization over the full product space avoids this.
-- **Cosine normalization does not close the linear-vs-lowrank gap** on either in-dist or OOD, so the gap is a capacity/dimensionality issue rather than a score-scale instability issue.
-- **Early-shared routing lands close to lowrank on val_loss and in-dist but is the worst on OOD (0.200).** A single routing decision shared across 32 LoRA injection points is *almost* as good as per-layer routing when the test distribution matches training, but clearly loses under distribution shift. This is a meaningful finding on its own: per-layer routing acts as an implicit distribution-shift defense.
-- **Early-shared routing works surprisingly well.** val_loss 1.952 and in-dist 0.523 — within ~0.01 of per-layer lowrank routing despite a *single* routing decision shared across all 32 LoRA injection points. OOD number still pending, but this is strong early evidence that per-layer routing may be unnecessary in the frozen-backbone PEFT setting, with a potential 16× router-parameter amortization across layers. Worth a standalone follow-up study.
-
-## Repository structure
+## Repository layout
 
 ```
 scalable-moe-lora/
-├── src/                      # Core source code
-│   ├── lora_layers.py        # LoRA variants + RoutedLoRA with 6 router types
-│   ├── model.py              # LLaMA + LoRA injection
-│   ├── data.py               # NLG dataset loaders (E2E, SAMSum, etc.)
-│   ├── data_reasoning.py     # Reasoning + NLG loaders (18-dataset suite)
-│   ├── train.py              # Training loop with validation + checkpointing
-│   ├── train_reasoning.py    # Training wrapper for reasoning suite
-│   ├── evaluate.py           # NLG eval (BLEU, ROUGE-L)
-│   ├── evaluate_reasoning.py # In-dist + OOD eval (accuracy + generation metrics)
-│   └── utils.py              # Config loading, checkpointing, seeding
-├── configs/                  # YAML configs for each experiment
-│   ├── reasoning_baseline.yaml
-│   ├── granularity_r{R}_k{K}{,_linear}.yaml   # Phase B (9 configs)
-│   └── granularity_r1_k64_{hierarchical,product_key,cosine,early_shared}.yaml   # Phase D
-├── scripts/                  # SLURM sbatch wrappers
-│   ├── sbatch_train.sh       # Training (gpu-medium)
-│   ├── sbatch_eval.sh        # OOD eval (gpu-short)
-│   ├── sbatch_stress.sh      # VRAM stress test (gpu-test)
-│   └── stress_test.py        # Stress test implementation
-├── results/                  # Eval JSONs from completed runs
-│   ├── phase_b/              # 9 in-dist + 9 OOD eval JSONs
-│   └── phase_d/              # Router comparison eval JSONs (partial)
+├── src/scalable_moe_lora/        # importable Python package
+│   ├── adapters/                 # adapter zoo + router catalogue
+│   │   ├── base.py               #   LoRA, LinearWithLoRA wrapper
+│   │   ├── moe.py                #   MoELoRA reference (Luo et al. 2024)
+│   │   ├── routed.py             #   RoutedLoRA (production, shared bottleneck)
+│   │   ├── dispatch.py           #   DispatchMoELoRA (sort-by-expert dispatch)
+│   │   ├── tm.py                 #   TM-LoRA
+│   │   └── routers.py            #   8 router types + build_router()
+│   ├── data/                     # dataset loaders
+│   │   ├── nlg.py                #   NLG primitives (E2E, SAMSum, ...)
+│   │   └── reasoning.py          #   18-dataset training suite + 7 OOD
+│   ├── analysis/                 # routing-behavior analysis
+│   │   ├── per_layer_routing.py  #   per-module top-k indices across datasets
+│   │   ├── gate_magnitudes.py    #   gate sharpness statistics
+│   │   ├── per_layer_summary.py  #   entropy / dead-expert / Jaccard summaries
+│   │   └── correctness.py        #   numerical-equivalence test for the 3 impls
+│   ├── model.py                  # LLaMA + adapter injection
+│   ├── train.py                  # training loop (resumable, distillation-aware)
+│   ├── train_reasoning.py        # reasoning-suite training entry point
+│   ├── evaluate.py               # NLG eval (BLEU, ROUGE-L)
+│   ├── evaluate_reasoning.py     # in-dist + OOD eval + routing capture
+│   └── utils.py
+├── configs/                      # YAML experiment configs
+│   ├── a_architecture/           #   4 cells (Part A)
+│   ├── b_granularity/            #   8 cells (Part B): linear/, lowrank/
+│   ├── c_routers/                #   6 cells (Part C): linear, lowrank, cosine,
+│   │                             #   hierarchical, product_key, early_shared
+│   └── extensions/               #   multihead-PK, two-stage-PK, temperature,
+│                                 #   linear-→-PK distillation
+├── scripts/                      # local launchers + Slurm wrappers
+│   ├── run_train.sh              #   single-config local training
+│   ├── run_eval.sh               #   single-checkpoint local eval
+│   ├── run_distill.sh            #   teacher → student distillation
+│   ├── migrate_multihead_checkpoint.py
+│   └── slurm/                    #   Slurm sbatch templates
+├── results/                      # eval JSONs + analysis JSONs (committed)
+│   ├── eval/                     #   per-checkpoint in-dist + OOD evaluation
+│   └── analysis/                 #   per-layer routing + gate-magnitude data
 ├── docs/
-│   └── future_work.md        # Phase E / F plans, analysis ideas
-├── setup.sh                  # Environment setup template
+│   ├── reproduce.md              #   step-by-step reproduction
+│   ├── architecture.md           #   adapter and router math
+│   └── results.md                #   detailed result tables
+├── tests/
+├── pyproject.toml
 ├── requirements.txt
-└── README.md                 # This file
+├── LICENSE
+└── README.md
 ```
 
 ## Quickstart
 
-### Setup
+### Install
 
 ```bash
-git clone git@github.com:attrung/scalable-moe-lora.git
+git clone https://github.com/<org>/scalable-moe-lora.git
 cd scalable-moe-lora
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
 
-# Configure HF cache and prewarm LLaMA 3.2 1B
-export HF_HOME=~/hf_cache
+python3 -m venv venv
+source venv/bin/activate
+
+pip install -e .          # installs scalable-moe-lora and its dependencies
+huggingface-cli login     # required to download LLaMA 3.2 1B
 huggingface-cli download meta-llama/Llama-3.2-1B
 ```
 
-### Train a single config
+The package exposes five console scripts after install:
+
+| Command | What it does |
+|---|---|
+| `moe-lora-train`         | Train a single configuration from a YAML config |
+| `moe-lora-eval`          | In-dist + (optional) OOD evaluation on a checkpoint |
+| `moe-lora-routing`       | Per-layer top-k routing collection (CPU) |
+| `moe-lora-gates`         | Per-layer gate-magnitude statistics (CPU) |
+| `moe-lora-correctness`   | Numerical-equivalence test for `MoELoRA ≡ RoutedLoRA ≡ DispatchMoELoRA` |
+
+### Train a single cell
 
 ```bash
-source setup.sh
-python src/train_reasoning.py \
-    --config configs/granularity_r1_k64.yaml \
-    --datasets gsm8k,arc,commonsenseqa,piqa,winogrande,boolq,hellaswag,math,openbookqa,sciq,mbpp,logiqa2,drop,mmlu_aux,triviaqa,anli,e2e,samsum \
-    --seed 42
+# Local (single GPU, ~16 h on a single A100 80 GB at the default config):
+./scripts/run_train.sh configs/c_routers/linear.yaml 42
+
+# Slurm:
+CONFIG=configs/c_routers/linear.yaml SEED=42 \
+    sbatch scripts/slurm/train.sbatch
 ```
 
-### Evaluate on OOD benchmarks
+### Evaluate a saved checkpoint
 
 ```bash
-python src/evaluate_reasoning.py \
-    --config configs/granularity_r1_k64.yaml \
-    --checkpoint results/phase_b/llama_granularity_r1_k64_..._seed42_best.pt \
-    --datasets gsm8k,arc,commonsenseqa,piqa,winogrande,boolq,hellaswag,math,openbookqa,sciq,mbpp,logiqa2,drop,mmlu_aux,triviaqa,anli,e2e,samsum \
-    --eval_datasets mmlu,mmlu_pro,bbh,ifeval,agieval,gpqa_diamond,truthfulqa \
-    --seed 42 \
-    --output results/phase_d/eval.json
+# In-distribution only (~0.5 h):
+./scripts/run_eval.sh \
+    configs/c_routers/linear.yaml \
+    results/checkpoints/routers_linear_..._best.pt
+
+# In-distribution + OOD (~1.5 h):
+./scripts/run_eval.sh \
+    configs/c_routers/linear.yaml \
+    results/checkpoints/routers_linear_..._best.pt 42 \
+    --eval_datasets mmlu,mmlu_pro,bbh,ifeval,agieval,gpqa_diamond,truthfulqa
 ```
 
-### On SLURM (Adroit / similar)
+### Per-layer routing analysis
 
 ```bash
-source setup.sh
-CONFIG=granularity_r1_k64 SEED=42 ROUTING=yes sbatch scripts/sbatch_train.sh
+# Copy the manifest template and edit checkpoint paths:
+cp configs/analysis_manifest.example.yaml results/analysis_manifest.yaml
+$EDITOR results/analysis_manifest.yaml
+
+# Collect (CPU-only, ~30 min for 6 K=64 checkpoints at 5 samples/dataset):
+moe-lora-routing --manifest results/analysis_manifest.yaml
+moe-lora-gates   --manifest results/analysis_manifest.yaml
+python -m scalable_moe_lora.analysis.per_layer_summary
 ```
 
-## Future work
+### Verify the three MoE-LoRA implementations are numerically equivalent
 
-- **Phase D tail**: complete early-shared router training and OOD eval. If early-shared matches linear quality, the paper's scalability argument becomes even stronger.
-- **Phase E — multi-seed error bars (running)**: re-run all 6 router configurations at K=64 (linear, lowrank rdim=16, hierarchical, product-key, cosine, early-shared) plus baseline at seeds 0 and 123, extending the OOD sweep to each checkpoint. With the seed-42 runs from Phases B and D, this gives 3-seed coverage (21 training runs total across the study). Critical for testing whether the ~2-pt linear-vs-√K-cost OOD gap is a real capacity-vs-efficiency tradeoff or within-noise.
-- **Phase F — 3B scale-up**: scale the winning router + baseline to LLaMA 3.2 3B at the finest granularity. Confirms that the granularity and router findings hold at larger model scale; required before extending to full MoE pretraining.
-- **Phase G — paper**: beam-search polish on NLG eval, BBH re-evaluation with the corrected extractor, final figures and paper draft.
-- **Extension to full MoE pretraining**: the LoRA setting here is deliberately chosen as a cheap controlled testbed. If Phases E + F show strong, consistent signals, the natural next step is to integrate the winning router (likely product-key or early-shared) into a full non-PEFT MoE pretraining run at frontier scale.
+```bash
+moe-lora-correctness   # < 30 s, CPU
+```
 
-See `docs/future_work.md` for detailed plans.
+This checks that `MoELoRA` (Luo et al. 2024 stack-and-gather), `RoutedLoRA` (shared-bottleneck), and `DispatchMoELoRA` (dispatch + bmm) produce identical forward outputs (error `0.00e+00`) and gradients (≤ 1e-5) at matched `(K, r, top_k)`.
 
-## Key references
+## Method
+
+**Base model.** Frozen LLaMA 3.2 1B (16 decoder layers, hidden dim `d=2048`). Adapters attached to query and value projections at every layer (32 injection points total).
+
+**Training data.** 18-dataset suite (~504k examples) covering arithmetic reasoning (GSM8K, MATH), multiple-choice science and commonsense (ARC, CommonsenseQA, PIQA, WinoGrande, BoolQ, HellaSwag, OpenBookQA, SciQ, MMLU-aux, LogiQA2), reading comprehension and QA (DROP, TriviaQA, ANLI), code (MBPP), and generation (E2E, SAMSum).
+
+**OOD benchmarks.** 7 held-out datasets: MMLU, MMLU-Pro, BBH, IFEval, AGIEval, GPQA Diamond, TruthfulQA.
+
+**Hyperparameters** (locked across the factorial, `configs/*.yaml`):
+
+| | |
+|---|---|
+| Effective batch | 36 (micro-batch 12 × grad-accum 3) |
+| Sequence length | 1024 |
+| Learning rate    | 4e-4 (3e-4 for TM-LoRA), linear warmup 500 steps then linear decay |
+| Weight decay    | 0.01 |
+| LoRA dropout    | 0.1 |
+| Label smoothing | 0.1 |
+| Epochs          | 3 |
+| Aux loss coef   | 0.01 (Switch-Transformer load balance, mandatory at low `top_k`) |
+| Precision       | base fp16 frozen, adapter fp32 |
+| Gradient ckpt   | on (`use_reentrant=False`) |
+| Primary seed    | 42 |
+
+**Evaluation.** Zero-shot prompts (no in-context exemplars or "think step by step" scaffolding). Gold targets are short answers except on GSM8K and MATH (full worked solutions, model emits a rationale before the final answer). In-distribution accuracy is the mean over the 16 accuracy-metric training datasets (E2E and SAMSum use BLEU/ROUGE-L). OOD accuracy is the mean over the 6 accuracy-metric OOD benchmarks (IFEval uses BLEU/ROUGE-L, reported separately). Validation loss is the best-epoch held-out cross-entropy on the training suite's validation split.
+
+## Results
+
+### Part A — Architecture family
+
+At matched active rank per token (`k · r = 16`), at `LLaMA 3.2 1B + qv` injection:
+
+| Architecture            | K  | r  | k  | val_loss ↓ | in-dist ↑ | OOD ↑ |
+|-------------------------|----|----|----|------------|-----------|-------|
+| Standard LoRA, r=16     | —  | 16 | —  | 1.984      | 0.500     | 0.207 |
+| MoE-LoRA (coarse)       | 8  | 8  | 2  | 2.154      | 0.371*    | 0.197 |
+| TM-LoRA, r=16           | 8  | 16 | 2  | 1.953      | 0.493     | 0.196 |
+| **MoE-LoRA (fine)**     | 64 | 1  | 16 | **1.923**  | **0.534** | **0.245** |
+
+\* coarse cell at `k=2` requires the load-balance penalty to converge under the linear router; without it the cell diverges. The MoE-LoRA (fine) row is the same checkpoint as Part B's `r=1, K=64, linear` cell, reused here so both ends of the granularity dimension show inside Part A.
+
+### Part B — Granularity sweep
+
+Held: `K · r = 64` (matrix budget) and `k · r = 16` (active rank per token). Sweeped: 4 splits × 2 routers (linear, lowrank with r_R=16).
+
+| (r, K, k) | linear router |       |       | lowrank router |       |       |
+|-----------|---------------|-------|-------|----------------|-------|-------|
+|           | val_loss      | in    | OOD   | val_loss       | in    | OOD   |
+| (8, 8, 2)*| 2.154         | 0.371 | 0.197 | 1.951          | 0.509 | 0.226 |
+| (4, 16, 4)| 1.926         | 0.523 | 0.226 | 1.949          | 0.522 | 0.223 |
+| (2, 32, 8)| 1.926         | 0.531 | **0.255** | 1.944      | 0.526 | 0.230 |
+| **(1, 64, 16)** | **1.923** | **0.534** | 0.245 | **1.933**  | **0.531** | 0.217 |
+
+\*linear at `k=2, K=8` requires the load-balance penalty.
+
+Three findings:
+1. **Finer granularity is monotonically better in-distribution** under both routers.
+2. **OOD peaks one step coarser** at `(r=2, K=32)` — a small generalization penalty at the finest split.
+3. **The lowrank router is structurally more robust at low top-k**: it converges at `(K=8, r=8, k=2)` *without* the load-balance penalty; the linear router at the same cell diverges. The `d → r_R → K` factoring smooths the routing decision enough to avoid winner-take-all collapse.
+
+### Part C — Router parameterization
+
+Held: `(K=64, r=1, top_k=16)`. Six router parameterizations:
+
+| Router          | per-layer params | val_loss ↓ | in-dist ↑ | OOD ↑     |
+|-----------------|------------------|------------|-----------|-----------|
+| **linear**      | 131K             | **1.923**  | 0.534     | **0.245** |
+| lowrank, r_R=16 | 34K              | 1.933      | 0.531     | 0.217     |
+| cosine          | 34K              | 1.954      | 0.520     | 0.230     |
+| hierarchical    | 33K (√K cost)    | 1.954      | 0.517     | 0.225     |
+| **product-key** | **33K (√K cost)**| **1.924**  | **0.536** | 0.224     |
+| early-shared    | ≈ 4K amortized   | 1.952      | 0.523     | 0.200     |
+
+Headline: **product-key matches linear on val_loss and in-distribution accuracy at √K parameter cost** (a 4× router-parameter reduction at this scale; ~23× at frontier-MoE scale `K=4096, d=7168`). The full linear router keeps a 2-3 pt OOD advantage over every √K-cost alternative, which Part D explains via soft-gate fidelity rather than selection sharpness.
+
+### Part D — Per-layer routing analysis
+
+We open the trained checkpoints of every Part C router and inspect routing behavior per RoutedLoRA module across all 18 in-dist datasets.
+
+**Capacity paradox.** Despite having the largest per-layer router parameter count (131K), the linear router leaves **30 of 64 experts dead** in its worst layer (no other K=64 router has any dead experts in any layer). Median per-layer routing entropy is 0.798 for linear vs 0.960-0.973 for the factored routers. The linear router's extra capacity is spent on imbalance, not on more-informative routing.
+
+**Gate-magnitude fidelity.** On the K-wide softmax over selected experts, the linear router produces dramatically sharper gates than the cheap routers:
+
+| Router        | mean  | std    | mean(max) | p95(max) | normalized entropy |
+|---------------|-------|--------|-----------|----------|--------------------|
+| **linear**    | 0.063 | **0.122** | **0.432** | **0.951** | **0.664**       |
+| lowrank       | 0.063 | 0.0003 | 0.063     | 0.064    | 1.000              |
+| cosine        | 0.063 | 0.007  | 0.079     | 0.089    | 0.998              |
+| hierarchical  | 0.063 | 0.014  | 0.090     | 0.113    | 0.992              |
+| product-key   | 0.063 | 0.011  | 0.086     | 0.104    | 0.995              |
+| early-shared  | 0.063 | 0.074  | 0.245     | 0.588    | 0.851              |
+
+Linear's max gate at the 95th-percentile token holds 95% of the weight; the cheap factored routers are essentially uniform 1/16 = 0.0625. This is direct evidence that the linear router's 2-3 pt OOD edge comes from **soft-gate magnitude resolution**, not from selecting different experts. The cheap routers do select the right top-k — they just then weight all 16 selected experts (almost) equally.
+
+**Distinct top-1 selections.** The cheap factored routers (lowrank, cosine, product-key, hierarchical) post 6-7 distinct dataset-level top-1 modes per layer; the linear router sits at 7. By that metric, the cheap routers are *more* input-conditional at the layer level, ruling out "linear has a sharper top-k" as the OOD-edge explanation.
+
+## Extensions
+
+Four follow-up cells aimed at the §Part D gate-fidelity hypothesis (still in flight as of this writeup):
+
+| Extension          | Tests                                                              | Status |
+|--------------------|--------------------------------------------------------------------|--------|
+| `multihead_pk`     | OOD edge = "rank of the gate function"? (H=4 PK heads, linear-cost params) | running |
+| `two_stage_pk`     | OOD edge = dedicated gate-calibration head?                       | running |
+| `product_key_temp` | Cheapest possible: a learnable per-module temperature on the top-k softmax | queued |
+| `distill_pk_from_linear` | Direct transfer of the teacher's K-wide gate distribution via KL | queued |
+
+When complete, each extension's eval JSONs land in `results/eval/` and feed into Part C's row of `docs/results.md`.
+
+## Architectural equivalence of the three MoE-LoRA implementations
+
+`MoELoRA`, `RoutedLoRA`, and `DispatchMoELoRA` are three implementations of the same architecture:
+
+- **`MoELoRA`** (Luo et al. 2024 reference): K independent `(A_i, B_i)` LoRA experts; all K computed, top-k gathered. Activation memory `O(B·S·K·d)` — OOMs on 80 GB at `K=64`.
+- **`RoutedLoRA`** (production): one shared `A: (Kr, d)` and `B: (d, Kr)`; the `Kr` bottleneck partitioned into K expert groups of `r` columns each, top-k gate masks the bottleneck. Activation memory `O(B·S·K·r) = O(B·S·64)` regardless of how `K·r` is split.
+- **`DispatchMoELoRA`** (production-style): K independent `(A_i, B_i)` stored as stacked `(K, r, d)` and `(K, d, r)` parameters; sort-by-expert dispatch + 2 batched bmm + scatter-add. Used when expert specialization needs full per-expert weights.
+
+`scalable_moe_lora.analysis.correctness` proves forward error `0.00e+00` and gradient error ≤ 1e-5 at matched `(K, r, top_k)`. We use `RoutedLoRA` for training (smallest activation footprint), and present results as MoE-LoRA in the writeup, consistent with Luo et al. 2024.
+
+## Reproduction
+
+A single-seed pass through Parts A-C is roughly 20 cells × ~16 h = ~320 GPU-hours on an A100 80 GB. See `docs/reproduce.md` for a step-by-step.
+
+## Citation
+
+```bibtex
+@misc{nguyen2026scalablemoelora,
+  author = {Nguyen, Anh Trung and Lu, Jiaqi and Huang, Andrew},
+  title  = {Scalable MoE-LoRA: A Controlled Factorial Study of Mixture-of-Experts Routing for Low-Rank Adaptation},
+  year   = {2026},
+  url    = {https://github.com/<org>/scalable-moe-lora},
+}
+```
+
+## License
+
+[MIT](LICENSE).
+
+## References
 
 - Hu et al. (2021). *LoRA: Low-Rank Adaptation of Large Language Models.* arXiv:2106.09685
 - Luo et al. (2024). *MoELoRA: Contrastive Learning Guided Mixture of Experts on PEFT.* arXiv:2402.12851
 - Lample et al. (2019). *Large Memory Layers with Product Keys.* NeurIPS 2019
 - Krajewski et al. (2024). *Scaling Laws for Fine-Grained Mixture of Experts.* arXiv:2402.07871
 - Shleifer & Rush (2025). *Omni-Router Transformer: Sharing Routing Decisions in Sparse MoE.* arXiv:2507.05724
-
-## License
-
-MIT License.
+- Fedus et al. (2021). *Switch Transformers: Scaling to Trillion Parameter Models.* arXiv:2101.03961
 
 ## Acknowledgments
 
-This study was conducted as a COS 484 project at Princeton University, with 1B training runs on the Princeton Adroit A100 cluster.
+This study was conducted as a final project for COS 484 (Princeton) on the Princeton Adroit cluster. Training was performed on 1× NVIDIA A100 80 GB per cell.

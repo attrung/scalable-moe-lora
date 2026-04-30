@@ -1,0 +1,21 @@
+# Part A — Standard LoRA baseline at r=16. Active rank per token = r = 16,
+# matched to the active rank of the MoE-LoRA and TM-LoRA cells in this Part
+# (k*r = 16 in all rows).
+name: standard_lora_r16
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: standard
+target_modules: qv
+rank: 16
+alpha: 32
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

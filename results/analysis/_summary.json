@@ -1,0 +1,418 @@
+[
+  {
+    "tag": "k64_cosine",
+    "label": "MoE-LoRA K=64 r=1 k=16 router=cosine",
+    "K": 64,
+    "top_k": 16,
+    "router_type": "cosine",
+    "n_samples_per_dataset": 5,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 6.65625,
+      "median": 6.0,
+      "min": 4,
+      "max": 12,
+      "stdev": 1.9278832617582793
+    },
+    "entropy_norm": {
+      "mean": 0.960157636414942,
+      "median": 0.9605896230239872,
+      "min": 0.9337039242934302,
+      "max": 0.9862889179398874
+    },
+    "hot_capture_mean": 0.25834677539248335,
+    "dead_any_layer": 0,
+    "dead_mean": 0,
+    "pairwise_hotset_jaccard_qproj_mean": 0.07598290598290598,
+    "pairwise_hotset_jaccard_vproj_mean": 0.07415417915417916,
+    "qv_within_layer_hotset_jaccard_mean": 0.10874542124542125,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.9651497390947524,
+        "mid": 0.9598158353832377,
+        "late": 0.9519266098844494
+      },
+      "v_proj": {
+        "early": 0.9628305707346922,
+        "mid": 0.9647232581213012,
+        "late": 0.9584812815502552
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 8,
+        "mid": 6.4,
+        "late": 5.833333333333333
+      },
+      "v_proj": {
+        "early": 6.2,
+        "mid": 6.8,
+        "late": 6.833333333333333
+      }
+    }
+  },
+  {
+    "tag": "k64_early_shared",
+    "label": "MoE-LoRA K=64 r=1 k=16 router=early_shared",
+    "K": 64,
+    "top_k": 16,
+    "router_type": "early_shared",
+    "n_samples_per_dataset": 5,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 3,
+      "median": 3.0,
+      "min": 3,
+      "max": 3,
+      "stdev": 0.0
+    },
+    "entropy_norm": {
+      "mean": 0.8191228996005121,
+      "median": 0.8191228996005121,
+      "min": 0.8191228996005121,
+      "max": 0.8191228996005121
+    },
+    "hot_capture_mean": 0.4457560260069775,
+    "dead_any_layer": 4,
+    "dead_mean": 4,
+    "pairwise_hotset_jaccard_qproj_mean": 1.0,
+    "pairwise_hotset_jaccard_vproj_mean": 1.0,
+    "qv_within_layer_hotset_jaccard_mean": 1.0,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.8191228996005121,
+        "mid": 0.8191228996005121,
+        "late": 0.8191228996005121
+      },
+      "v_proj": {
+        "early": 0.8191228996005121,
+        "mid": 0.8191228996005121,
+        "late": 0.8191228996005121
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 3,
+        "mid": 3,
+        "late": 3
+      },
+      "v_proj": {
+        "early": 3,
+        "mid": 3,
+        "late": 3
+      }
+    }
+  },
+  {
+    "tag": "k64_hierarchical",
+    "label": "MoE-LoRA K=64 r=1 k=16 router=hierarchical",
+    "K": 64,
+    "top_k": 16,
+    "router_type": "hierarchical",
+    "n_samples_per_dataset": 5,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 7.53125,
+      "median": 7.0,
+      "min": 4,
+      "max": 14,
+      "stdev": 2.1550297505617997
+    },
+    "entropy_norm": {
+      "mean": 0.9706345435337754,
+      "median": 0.9726152557907001,
+      "min": 0.9409511586455159,
+      "max": 0.985333658675664
+    },
+    "hot_capture_mean": 0.23597968452664128,
+    "dead_any_layer": 0,
+    "dead_mean": 0,
+    "pairwise_hotset_jaccard_qproj_mean": 0.06975579975579975,
+    "pairwise_hotset_jaccard_vproj_mean": 0.07222499722499723,
+    "qv_within_layer_hotset_jaccard_mean": 0.05787545787545788,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.966712663776114,
+        "mid": 0.9738156760308959,
+        "late": 0.9661045134545756
+      },
+      "v_proj": {
+        "early": 0.9771557198423645,
+        "mid": 0.9724688578309509,
+        "late": 0.9688189541586224
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 7.2,
+        "mid": 10,
+        "late": 6.166666666666667
+      },
+      "v_proj": {
+        "early": 6.6,
+        "mid": 8,
+        "late": 7.5
+      }
+    }
+  },
+  {
+    "tag": "k64_linear",
+    "label": "MoE-LoRA K=64 r=1 k=16 router=linear",
+    "K": 64,
+    "top_k": 16,
+    "router_type": "linear",
+    "n_samples_per_dataset": 5,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 4.90625,
+      "median": 5.0,
+      "min": 1,
+      "max": 7,
+      "stdev": 1.352640786304403
+    },
+    "entropy_norm": {
+      "mean": 0.7918518042750927,
+      "median": 0.7976625115503964,
+      "min": 0.729125255692777,
+      "max": 0.8951039211270757
+    },
+    "hot_capture_mean": 0.4347945533024104,
+    "dead_any_layer": 30,
+    "dead_mean": 18.03125,
+    "pairwise_hotset_jaccard_qproj_mean": 0.07368131868131868,
+    "pairwise_hotset_jaccard_vproj_mean": 0.06278998778998779,
+    "qv_within_layer_hotset_jaccard_mean": 0.07229853479853479,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.7712965260335908,
+        "mid": 0.791862107760899,
+        "late": 0.8011620188924431
+      },
+      "v_proj": {
+        "early": 0.773644439287571,
+        "mid": 0.8133769811592407,
+        "late": 0.7968975587069667
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 4.6,
+        "mid": 4.8,
+        "late": 5.333333333333333
+      },
+      "v_proj": {
+        "early": 5.4,
+        "mid": 5.2,
+        "late": 4.166666666666667
+      }
+    }
+  },
+  {
+    "tag": "k64_lowrank",
+    "label": "MoE-LoRA K=64 r=1 k=16 router=lowrank",
+    "K": 64,
+    "top_k": 16,
+    "router_type": "lowrank",
+    "n_samples_per_dataset": 5,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 6.40625,
+      "median": 6.0,
+      "min": 3,
+      "max": 12,
+      "stdev": 2.0768986649608423
+    },
+    "entropy_norm": {
+      "mean": 0.9608859972571231,
+      "median": 0.9603365501249974,
+      "min": 0.9384309576383495,
+      "max": 0.9794925368125625
+    },
+    "hot_capture_mean": 0.2591898464755788,
+    "dead_any_layer": 0,
+    "dead_mean": 0,
+    "pairwise_hotset_jaccard_qproj_mean": 0.07901709401709402,
+    "pairwise_hotset_jaccard_vproj_mean": 0.06705738705738705,
+    "qv_within_layer_hotset_jaccard_mean": 0.03869047619047619,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.9616678128013032,
+        "mid": 0.9553094905303602,
+        "late": 0.9607684747811537
+      },
+      "v_proj": {
+        "early": 0.9707221202337954,
+        "mid": 0.9622767602603387,
+        "late": 0.9556433574020049
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 5.6,
+        "mid": 5.4,
+        "late": 7.333333333333333
+      },
+      "v_proj": {
+        "early": 5.4,
+        "mid": 7.4,
+        "late": 7
+      }
+    }
+  },
+  {
+    "tag": "k64_product_key",
+    "label": "MoE-LoRA K=64 r=1 k=16 router=product_key",
+    "K": 64,
+    "top_k": 16,
+    "router_type": "product_key",
+    "n_samples_per_dataset": 5,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 7.4375,
+      "median": 7.0,
+      "min": 3,
+      "max": 13,
+      "stdev": 2.746698898443307
+    },
+    "entropy_norm": {
+      "mean": 0.9659553236196022,
+      "median": 0.9644949513147842,
+      "min": 0.9434911683385118,
+      "max": 0.9900785345748435
+    },
+    "hot_capture_mean": 0.25024963824135743,
+    "dead_any_layer": 0,
+    "dead_mean": 0,
+    "pairwise_hotset_jaccard_qproj_mean": 0.07131257631257631,
+    "pairwise_hotset_jaccard_vproj_mean": 0.06785103785103785,
+    "qv_within_layer_hotset_jaccard_mean": 0.0967032967032967,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.9658876686217092,
+        "mid": 0.9618652891798444,
+        "late": 0.9652227398316446
+      },
+      "v_proj": {
+        "early": 0.9732191966376794,
+        "mid": 0.9720811997264737,
+        "late": 0.9589945243348121
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 4.8,
+        "mid": 6,
+        "late": 8.5
+      },
+      "v_proj": {
+        "early": 8.2,
+        "mid": 8.2,
+        "late": 8.5
+      }
+    }
+  },
+  {
+    "tag": "k8_coarse_best",
+    "label": "MoE-LoRA K=8 r=8 k=2 (best checkpoint, pre-divergence)",
+    "K": 8,
+    "top_k": 2,
+    "router_type": "linear",
+    "n_samples_per_dataset": 10,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 1.15625,
+      "median": 1.0,
+      "min": 1,
+      "max": 2,
+      "stdev": 0.36890203262847354
+    },
+    "entropy_norm": {
+      "mean": 0.4230603314547503,
+      "median": 0.36969365630944595,
+      "min": 0.3333333333333333,
+      "max": 0.7293486607630402
+    },
+    "hot_capture_mean": 0.4889838485929449,
+    "dead_any_layer": 6,
+    "dead_mean": 3.375,
+    "pairwise_hotset_jaccard_qproj_mean": 0.175,
+    "pairwise_hotset_jaccard_vproj_mean": 0.125,
+    "qv_within_layer_hotset_jaccard_mean": 0.25,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.36703821270016646,
+        "mid": 0.3592844149818114,
+        "late": 0.36634940238596037
+      },
+      "v_proj": {
+        "early": 0.3951107006265966,
+        "mid": 0.5230454479521381,
+        "late": 0.5195733851554475
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 1.2,
+        "mid": 1,
+        "late": 1.1666666666666667
+      },
+      "v_proj": {
+        "early": 1,
+        "mid": 1,
+        "late": 1.5
+      }
+    }
+  },
+  {
+    "tag": "k8_coarse_final",
+    "label": "MoE-LoRA K=8 r=8 k=2 (final checkpoint, post-divergence)",
+    "K": 8,
+    "top_k": 2,
+    "router_type": "linear",
+    "n_samples_per_dataset": 10,
+    "n_modules": 32,
+    "distinct_top1": {
+      "mean": 1.40625,
+      "median": 1.0,
+      "min": 1,
+      "max": 4,
+      "stdev": 0.7120789644505048
+    },
+    "entropy_norm": {
+      "mean": 0.4322225787594266,
+      "median": 0.40969753126098707,
+      "min": 0.3333333333333333,
+      "max": 0.7031009446511715
+    },
+    "hot_capture_mean": 0.48502279032897344,
+    "dead_any_layer": 6,
+    "dead_mean": 3.625,
+    "pairwise_hotset_jaccard_qproj_mean": 0.2,
+    "pairwise_hotset_jaccard_vproj_mean": 0.14166666666666666,
+    "qv_within_layer_hotset_jaccard_mean": 0.3125,
+    "groups_entropy": {
+      "q_proj": {
+        "early": 0.42108104204110175,
+        "mid": 0.39435156864491017,
+        "late": 0.39576304980629967
+      },
+      "v_proj": {
+        "early": 0.36801165356415444,
+        "mid": 0.49423775288931204,
+        "late": 0.5113556892944103
+      }
+    },
+    "groups_distinct_top1": {
+      "q_proj": {
+        "early": 1.2,
+        "mid": 1.2,
+        "late": 1.3333333333333333
+      },
+      "v_proj": {
+        "early": 1,
+        "mid": 1.2,
+        "late": 2.3333333333333335
+      }
+    }
+  }
+]

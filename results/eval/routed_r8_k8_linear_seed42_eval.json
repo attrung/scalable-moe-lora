@@ -1,0 +1,513 @@
+{
+  "metrics": {
+    "gsm8k": {
+      "accuracy": 0.0932524639878696
+    },
+    "arc": {
+      "accuracy": 0.26023890784982934
+    },
+    "commonsenseqa": {
+      "accuracy": 0.19901719901719903
+    },
+    "piqa": {
+      "accuracy": 0.5081610446137106
+    },
+    "winogrande": {
+      "accuracy": 0.5059194948697711
+    },
+    "boolq": {
+      "accuracy": 0.7247706422018348
+    },
+    "hellaswag": {
+      "accuracy": 0.2506472814180442
+    },
+    "math": {
+      "accuracy": 0.0294
+    },
+    "openbookqa": {
+      "accuracy": 0.246
+    },
+    "sciq": {
+      "accuracy": 0.284
+    },
+    "mbpp": {
+      "bleu": 0.06920642198628031,
+      "rougeL": 0.4512266606794793
+    },
+    "logiqa2": {
+      "accuracy": 0.26717557251908397
+    },
+    "drop": {
+      "accuracy": 0.3722010984368399
+    },
+    "mmlu_aux": {
+      "accuracy": 0.14384727870034655
+    },
+    "triviaqa": {
+      "accuracy": 0.19035674470457078
+    },
+    "anli": {
+      "accuracy": 0.415
+    },
+    "e2e": {
+      "bleu": 0.5605617812144184,
+      "rougeL": 0.6528324248661455
+    },
+    "samsum": {
+      "bleu": 0.09411759121954352,
+      "rougeL": 0.3670901129060565
+    }
+  },
+  "routing": {
+    "gsm8k": {
+      "entropy": 2.974019657999303,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9913398859997676,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "6": 119048,
+        "2": 117253,
+        "3": 108301,
+        "7": 106076,
+        "1": 100222
+      },
+      "usage_counts": [
+        83690.0,
+        100222.0,
+        117253.0,
+        108301.0,
+        84163.0,
+        62943.0,
+        119048.0,
+        106076.0
+      ]
+    },
+    "arc": {
+      "entropy": 2.975514699690886,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9918382332302954,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 126628,
+        "6": 121191,
+        "3": 113463,
+        "7": 112673,
+        "1": 106155
+      },
+      "usage_counts": [
+        85858.0,
+        106155.0,
+        126628.0,
+        113463.0,
+        88160.0,
+        69168.0,
+        121191.0,
+        112673.0
+      ]
+    },
+    "commonsenseqa": {
+      "entropy": 2.9856869409552282,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9952289803184095,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "6": 76030,
+        "3": 74395,
+        "2": 73577,
+        "1": 70334,
+        "7": 61397
+      },
+      "usage_counts": [
+        58474.0,
+        70334.0,
+        73577.0,
+        74395.0,
+        59901.0,
+        48644.0,
+        76030.0,
+        61397.0
+      ]
+    },
+    "piqa": {
+      "entropy": 2.962913488284802,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9876378294282673,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 133377,
+        "6": 127412,
+        "7": 122037,
+        "3": 109975,
+        "1": 101531
+      },
+      "usage_counts": [
+        83884.0,
+        101531.0,
+        133377.0,
+        109975.0,
+        88038.0,
+        61906.0,
+        127412.0,
+        122037.0
+      ]
+    },
+    "winogrande": {
+      "entropy": 2.980783324158356,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9935944413861186,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 69456,
+        "6": 69422,
+        "3": 59717,
+        "4": 59158,
+        "1": 56899
+      },
+      "usage_counts": [
+        54592.0,
+        56899.0,
+        69456.0,
+        59717.0,
+        59158.0,
+        38872.0,
+        69422.0,
+        52172.0
+      ]
+    },
+    "boolq": {
+      "entropy": 2.9678811019714626,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9892937006571542,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 282538,
+        "6": 276927,
+        "7": 257858,
+        "3": 247006,
+        "1": 233303
+      },
+      "usage_counts": [
+        195089.0,
+        233303.0,
+        282538.0,
+        247006.0,
+        191943.0,
+        136712.0,
+        276927.0,
+        257858.0
+      ]
+    },
+    "hellaswag": {
+      "entropy": 2.9741849319171676,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9913949773057226,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 194883,
+        "6": 185103,
+        "7": 159287,
+        "3": 158919,
+        "4": 144092
+      },
+      "usage_counts": [
+        131540.0,
+        140121.0,
+        194883.0,
+        158919.0,
+        144092.0,
+        99495.0,
+        185103.0,
+        159287.0
+      ]
+    },
+    "math": {
+      "entropy": 2.972182103235851,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9907273677452837,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 108918,
+        "6": 108005,
+        "7": 100476,
+        "3": 98769,
+        "1": 89487
+      },
+      "usage_counts": [
+        79029.0,
+        89487.0,
+        108918.0,
+        98769.0,
+        76958.0,
+        55670.0,
+        108005.0,
+        100476.0
+      ]
+    },
+    "openbookqa": {
+      "entropy": 2.9759842062933193,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9919947354311064,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 80498,
+        "6": 78872,
+        "3": 72837,
+        "7": 72592,
+        "1": 69008
+      },
+      "usage_counts": [
+        55441.0,
+        69008.0,
+        80498.0,
+        72837.0,
+        57014.0,
+        44618.0,
+        78872.0,
+        72592.0
+      ]
+    },
+    "sciq": {
+      "entropy": 2.9823259540007836,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9941086513335945,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "6": 74082,
+        "2": 71141,
+        "3": 70864,
+        "1": 66438,
+        "7": 62274
+      },
+      "usage_counts": [
+        55098.0,
+        66438.0,
+        71141.0,
+        70864.0,
+        54663.0,
+        44448.0,
+        74082.0,
+        62274.0
+      ]
+    },
+    "mbpp": {
+      "entropy": 2.971343701981683,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.990447900660561,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 99041,
+        "6": 98934,
+        "7": 90381,
+        "3": 89861,
+        "1": 83962
+      },
+      "usage_counts": [
+        69386.0,
+        83962.0,
+        99041.0,
+        89861.0,
+        69211.0,
+        51000.0,
+        98934.0,
+        90381.0
+      ]
+    },
+    "logiqa2": {
+      "entropy": 2.974593013985325,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.991531004661775,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 383259,
+        "6": 363572,
+        "7": 336069,
+        "3": 334803,
+        "1": 310893
+      },
+      "usage_counts": [
+        269029.0,
+        310893.0,
+        383259.0,
+        334803.0,
+        264539.0,
+        199404.0,
+        363572.0,
+        336069.0
+      ]
+    },
+    "drop": {
+      "entropy": 2.980240885111744,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9934136283705813,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "3": 525379,
+        "6": 500380,
+        "1": 457590,
+        "2": 455124,
+        "4": 440868
+      },
+      "usage_counts": [
+        434921.0,
+        457590.0,
+        455124.0,
+        525379.0,
+        440868.0,
+        299588.0,
+        500380.0,
+        348550.0
+      ]
+    },
+    "mmlu_aux": {
+      "entropy": 2.9900817767248156,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9966939255749385,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 480049,
+        "6": 444209,
+        "3": 440004,
+        "7": 435693,
+        "1": 393313
+      },
+      "usage_counts": [
+        363336.0,
+        393313.0,
+        480049.0,
+        440004.0,
+        362788.0,
+        333536.0,
+        444209.0,
+        435693.0
+      ]
+    },
+    "triviaqa": {
+      "entropy": 2.9840440307350375,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9946813435783458,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "6": 38590,
+        "2": 35212,
+        "1": 34671,
+        "3": 34412,
+        "7": 30945
+      },
+      "usage_counts": [
+        29604.0,
+        34671.0,
+        35212.0,
+        34412.0,
+        28700.0,
+        22586.0,
+        38590.0,
+        30945.0
+      ]
+    },
+    "anli": {
+      "entropy": 2.9797013442654,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9932337814218001,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "2": 267180,
+        "6": 255856,
+        "3": 211310,
+        "4": 201869,
+        "7": 198935
+      },
+      "usage_counts": [
+        197614.0,
+        198134.0,
+        267180.0,
+        211310.0,
+        201869.0,
+        146926.0,
+        255856.0,
+        198935.0
+      ]
+    },
+    "e2e": {
+      "entropy": 2.9840587284581828,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9946862428193942,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "6": 67385,
+        "3": 67097,
+        "1": 60490,
+        "2": 59548,
+        "4": 55633
+      },
+      "usage_counts": [
+        55286.0,
+        60490.0,
+        59548.0,
+        67097.0,
+        55633.0,
+        44800.0,
+        67385.0,
+        43777.0
+      ]
+    },
+    "samsum": {
+      "entropy": 2.9740451255392926,
+      "max_entropy": 3.0,
+      "normalized_entropy": 0.9913483751797642,
+      "components_used": 8,
+      "components_used_1pct": 8,
+      "total_components": 8,
+      "top_components": {
+        "6": 271454,
+        "2": 269414,
+        "3": 253280,
+        "7": 244750,
+        "1": 234378
+      },
+      "usage_counts": [
+        194536.0,
+        234378.0,
+        269414.0,
+        253280.0,
+        195698.0,
+        143402.0,
+        271454.0,
+        244750.0
+      ]
+    }
+  }
+}

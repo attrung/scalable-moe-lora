@@ -1,0 +1,27 @@
+# Part C (router parameterization) — lowrank at K=64, r=1, top_k=16.
+# Factored: W_q (d,r_R) + keys (K,r_R) at r_R=16. 34K params.
+# Matched matrix budget (K*r = 64) and active rank (k*r = 16) with every other
+# Part C cell — only the routing mechanism varies.
+name: routers_lowrank
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: lowrank
+router_dim: 16
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

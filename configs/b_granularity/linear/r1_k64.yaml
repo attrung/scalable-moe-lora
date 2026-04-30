@@ -1,0 +1,25 @@
+# Part B (granularity) — r=1, K=64, top_k=16, linear router.
+# Matched matrix budget K*r = 64 (128*d per layer) and active rank
+# k*r = 16 across the sweep.
+name: granularity_r1_k64_linear
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: linear
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

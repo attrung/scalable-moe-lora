@@ -1,0 +1,52 @@
+# Manifest for the routing-analysis scripts (per_layer_routing,
+# gate_magnitudes). After running training and saving checkpoints to
+# results/checkpoints/, copy this file to results/analysis_manifest.yaml
+# and edit the `checkpoint` paths to point at your saved files.
+#
+# The default checkpoint name pattern (set in src/scalable_moe_lora/utils.py
+# `save_checkpoint`) is:
+#     <name>_<dataset_tag>_seed<N>_best.pt
+# where <name> comes from the YAML's `name:` field and <dataset_tag> is the
+# `+`-joined list of training dataset names. For the standard 18-dataset
+# training suite the tag is the long string at the bottom of this file.
+#
+# Run:
+#     python -m scalable_moe_lora.analysis.per_layer_routing \
+#         --manifest results/analysis_manifest.yaml
+#     python -m scalable_moe_lora.analysis.gate_magnitudes \
+#         --manifest results/analysis_manifest.yaml
+#     python -m scalable_moe_lora.analysis.per_layer_summary
+
+models:
+  - tag: linear
+    label: "linear router (full Linear(d, K), 131K params)"
+    config: configs/c_routers/linear.yaml
+    checkpoint: results/checkpoints/routers_linear_<DS_TAG>_seed42_best.pt
+
+  - tag: lowrank
+    label: "lowrank router (W_q + keys, r_R=16, 34K params)"
+    config: configs/c_routers/lowrank.yaml
+    checkpoint: results/checkpoints/routers_lowrank_<DS_TAG>_seed42_best.pt
+
+  - tag: cosine
+    label: "cosine router (lowrank with L2-normalized q and keys)"
+    config: configs/c_routers/cosine.yaml
+    checkpoint: results/checkpoints/routers_cosine_<DS_TAG>_seed42_best.pt
+
+  - tag: hierarchical
+    label: "hierarchical router (two-level sqrt(K) routing)"
+    config: configs/c_routers/hierarchical.yaml
+    checkpoint: results/checkpoints/routers_hierarchical_<DS_TAG>_seed42_best.pt
+
+  - tag: product_key
+    label: "product-key router (Lample et al. 2019; sqrt(K) cost)"
+    config: configs/c_routers/product_key.yaml
+    checkpoint: results/checkpoints/routers_product_key_<DS_TAG>_seed42_best.pt
+
+  - tag: early_shared
+    label: "early-shared router (one Linear(d, K) cached at the first layer)"
+    config: configs/c_routers/early_shared.yaml
+    checkpoint: results/checkpoints/routers_early_shared_<DS_TAG>_seed42_best.pt
+
+# DS_TAG for the standard 18-dataset training suite:
+#   gsm8k+arc+commonsenseqa+piqa+winogrande+boolq+hellaswag+math+openbookqa+sciq+mbpp+logiqa2+drop+mmlu_aux+triviaqa+anli+e2e+samsum

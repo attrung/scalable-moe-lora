@@ -1,0 +1,25 @@
+# Part A — TM-LoRA at r=16, K=8, top_k=2.
+# Shared A,B with a learned (K, r) expert-vector table; selected rows are
+# softmax-summed and added to the rank-r bottleneck before GELU. Active rank
+# per token stays r (experts modulate, they don't expand rank). Matrix budget
+# per layer = 2*d*r + K*r, much cheaper than MoE-LoRA at the same K.
+name: tm_lora_r16
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: tm
+target_modules: qv
+rank: 16
+alpha: 32
+num_experts: 8
+top_k: 2
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0003
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

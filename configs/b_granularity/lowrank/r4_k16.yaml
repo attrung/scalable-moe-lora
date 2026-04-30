@@ -1,0 +1,26 @@
+# Part B (granularity) — r=4, K=16, top_k=4, lowrank router.
+# Matched matrix budget K*r = 64 (128*d per layer) and active rank
+# k*r = 16 across the sweep.
+name: granularity_r4_k16_lowrank
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: routed
+target_modules: qv
+rank: 4
+alpha: 32
+num_experts: 16
+top_k: 4
+router_type: lowrank
+router_dim: 16
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

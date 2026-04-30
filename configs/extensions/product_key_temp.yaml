@@ -1,0 +1,31 @@
+# Extension — product-key router + learnable per-module temperature on the
+# top-k softmax (one log_tau scalar per RoutedLoRA injection, 32 total).
+# Aux loss p_i = softmax(full_scores).mean(0) is computed from the *raw*
+# scores so the load-balance penalty does not pull tau back toward 1.
+#
+# Tests whether the cheap router's near-uniform soft gates are an artifact
+# fixable with a single extra DOF (lower tau → sharper gates on the same
+# selection). If gate-magnitude sharpness causally drives OOD, this should
+# close some of linear's 2-3 pt OOD edge over plain product_key.
+name: ext_product_key_temp
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: routed
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: product_key_temp
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true
