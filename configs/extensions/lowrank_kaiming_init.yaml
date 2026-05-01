@@ -1,0 +1,29 @@
+# Part C extension — lowrank router with kaiming-uniform W_query init.
+# Default lowrank uses PyTorch's bare Linear init for W_query; this variant
+# applies kaiming_uniform_(a=sqrt(5)) to test whether lowrank's coarser-than-
+# linear gate-fidelity is partly an init-scale gap rather than a routing-
+# capacity gap. K, r, top_k matched to configs/c_routers/lowrank.yaml.
+name: routers_lowrank_kaiming
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: moe
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: lowrank
+router_dim: 16
+router_init: kaiming
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

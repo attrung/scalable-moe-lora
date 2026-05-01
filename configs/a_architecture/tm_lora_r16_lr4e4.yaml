@@ -1,0 +1,25 @@
+# Part A variant — TM-LoRA at r=16, K=8, top_k=2, lr=4e-4.
+# Same family/budget as configs/a_architecture/tm_lora_r16.yaml; only the
+# learning rate is bumped from 3e-4 to 4e-4 to match the lr used by the Part C
+# router cells. Tests whether the original tm_lora_r16 was disadvantaged by a
+# lower lr in the Part A comparison.
+name: tm_lora_r16_lr4e4
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: tm
+target_modules: qv
+rank: 16
+alpha: 32
+num_experts: 8
+top_k: 2
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true

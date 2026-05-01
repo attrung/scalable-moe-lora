@@ -1,0 +1,28 @@
+# Part C extension — linear router with N(0, 0.01) init.
+# Default linear uses PyTorch's kaiming-uniform Linear init (~1/sqrt(d) scale);
+# this variant initializes the router with N(0, 0.01), matching LowRankRouter's
+# `keys` init. Tests whether linear's gate-fidelity advantage survives a much
+# smaller init-scale start.
+name: routers_linear_smallinit
+model_name: meta-llama/Llama-3.2-1B
+
+lora_type: moe
+target_modules: qv
+rank: 1
+alpha: 32
+num_experts: 64
+top_k: 16
+router_type: linear
+router_init: small_randn
+aux_loss_coef: 0.01
+
+lora_dropout: 0.1
+label_smoothing: 0.1
+lr: 0.0004
+weight_decay: 0.01
+warmup_steps: 500
+epochs: 3
+batch_size: 12
+gradient_accumulation_steps: 3
+max_seq_len: 1024
+gradient_checkpointing: true
