@@ -63,7 +63,7 @@ All routers map `x ∈ ℝ^d` to `(top-k indices, top-k softmax weights, optiona
 | `linear`        | 131K, `O(d·K)`                  | `score = Linear(d, K)(x)` |
 | `lowrank`       | 34K, `O(d·r_R + K·r_R)` at `r_R=16` | `score = (W_q x) · keys`, factored through a rank-`r_R` bottleneck |
 | `cosine`        | 34K                              | `lowrank` with L2-normalized query and keys before the dot product |
-| `hierarchical`  | 33K, `O(d·√K)`                   | Two-level: pick top-`√k` of `√K` groups, then top-`√k` experts within |
+| `hierarchical`  | 33K, `O(d·√K)`                   | Two-level: pick top-`√k` of `√K` groups, then top-`√k` experts within. The level-2 router is a single `Linear(d, K/G)` shared across all groups — every selected group gets the same within-group expert ranking. This is intentional: replacing it with a per-group level-2 router would erase the `O(d·√K)` parameter saving (would cost `O(d·K)` in level-2 weights). The trade-off is that all `√k` selected groups share a within-group selection, which we discuss in Part D when interpreting hierarchical's gate-magnitude profile. |
 | `product_key`   | 33K, `O(d·√K)`                   | Lample et al. 2019: two scorers `d → √K`; expert `(i,j)` has additive score `s1[i] + s2[j]` |
 | `multihead_pk`  | 131K at `H=4`                    | `H` parallel product-key heads, per-head K-wide scores averaged before top-k. Vectorized into one `Linear(d, H·√K)` per scorer. |
 | `two_stage_pk`  | ~67K at `gate_rank=16`           | Stage 1: product-key picks top-k indices. Stage 2: a separate rank-`r_g` gate-calibration head recomputes soft-gate weights at the selected positions. `topk_weights = softmax(select_topk + gate_topk)` so both heads receive task-loss gradient. |

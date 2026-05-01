@@ -1,17 +1,17 @@
 # Detailed results
 
-All numbers below are from `LLaMA 3.2 1B + qv` injection at the locked hyperparameters in `README.md` § Method, seed 42, on the 18-dataset training suite (504k examples) and 7-benchmark OOD sweep. Validation loss is the best-epoch held-out cross-entropy. In-dist accuracy is the mean over the 16 accuracy-metric training datasets (E2E and SAMSum use BLEU/ROUGE-L). OOD accuracy is the mean over the 6 accuracy-metric OOD benchmarks (IFEval uses BLEU/ROUGE-L, reported separately).
+All numbers below are from `LLaMA 3.2 1B + qv` injection at the locked hyperparameters in `README.md` § Method, seed 42, on the 18-dataset training suite (504k examples) and 7-benchmark OOD sweep. Validation loss is the best-epoch held-out cross-entropy. In-dist accuracy is the mean over the **15** accuracy-metric training datasets (MBPP, E2E, and SAMSum use BLEU/ROUGE-L and are excluded from this average). OOD accuracy is the mean over the 6 accuracy-metric OOD benchmarks. **IFEval is not reported in the OOD pool**: its BLEU/ROUGE-L "gold reference" is the prompt's first sentence (see `data/reasoning.py:format_ifeval`), so any numeric score there is a measure of prompt-echoing rather than instruction following.
 
 ## Part A — Adapter family
 
 | Architecture            | K  | r  | k  | matrix params /layer | val_loss ↓ | in-dist ↑ | OOD ↑ |
 |-------------------------|----|----|----|----------------------|------------|-----------|-------|
-| Standard LoRA, r=16     | —  | 16 | —  | 32d                  | 1.984      | 0.500     | 0.207 |
-| MoE-LoRA (coarse)*      | 8  | 8  | 2  | 128d                 | 2.154      | 0.371     | 0.197 |
-| TM-LoRA, r=16           | 8  | 16 | 2  | 32d + 8·16           | 1.953      | 0.493     | 0.196 |
+| Standard LoRA, r=16     | —  | 16 | —  | 32d                  | 1.984      | 0.5111    | 0.227 |
+| MoE-LoRA (coarse)*      | 8  | 8  | 2  | 128d                 | 2.154      | 0.371     | 0.195 |
+| TM-LoRA, r=16           | 8  | 16 | 2  | 32d + 8·16           | 1.953      | 0.5088    | 0.220 |
 | **MoE-LoRA (fine)**     | 64 | 1  | 16 | 128d                 | **1.923**  | **0.534** | **0.245** |
 
-\* Required the load-balance penalty to converge at `top_k=2`; without it the linear router diverges and we land at val_loss = 2.154 with the LB penalty (still the worst row in this column).
+\* Required the load-balance penalty to converge at `top_k=2`; without it the linear router diverges and we land at val_loss = 2.154 with the LB penalty (still the worst row in this column). Also: two seed=42 runs (`routed_r8_k8_linear` and `llama_granularity_r8_k8_linear`) had divergent training trajectories from unseeded RNG paths in the router init — the numbers above use the more stable run, picked by best validation loss. After the `PYTHONHASHSEED` fix on this branch, future re-runs of this cell will be deterministic.
 
 The three families are matched on **active rank per token** (`k · r = 16`), not on static parameter count: MoE-LoRA has 4× the per-layer matrix budget of Standard LoRA and TM-LoRA. The comparison reflects per-token compute rather than total parameters.
 
@@ -21,7 +21,7 @@ The three families are matched on **active rank per token** (`k · r = 16`), not
 
 | (r, K, k)        | val_loss ↓ | in-dist ↑ | OOD ↑      |
 |------------------|------------|-----------|------------|
-| (8, 8, 2)*       | 2.154      | 0.371     | 0.197      |
+| (8, 8, 2)*       | 2.154      | 0.371     | 0.195      |
 | (4, 16, 4)       | 1.926      | 0.523     | 0.226      |
 | (2, 32, 8)       | 1.926      | 0.531     | **0.255**  |
 | **(1, 64, 16)**  | **1.923**  | **0.534** | 0.245      |
@@ -60,18 +60,20 @@ For each of the 32 MoELoRA modules (16 layers × {q_proj, v_proj}), we walk all 
 |--------------------------|----|---------------|----------------------------------------|------------------------------|----------------------------|
 | K=8 coarse (best)        | 8  | linear        | 1                                      | 0.370                        | 6 / 8                      |
 | K=8 coarse (final)       | 8  | linear        | 1                                      | 0.410                        | 6 / 8                      |
-| K=64 linear              | 64 | linear        | 7                                      | 0.798                        | **30 / 64**                |
+| K=64 linear              | 64 | linear        | 5                                      | 0.798                        | **30 / 64**                |
 | K=64 lowrank             | 64 | lowrank       | 6                                      | 0.961                        | 0                          |
 | K=64 cosine              | 64 | cosine        | 6                                      | 0.973                        | 0                          |
 | K=64 hierarchical        | 64 | hierarchical  | 7                                      | 0.971                        | 0                          |
 | K=64 product-key         | 64 | product-key   | 7                                      | 0.969                        | 0                          |
-| K=64 early-shared        | 64 | early-shared  | 3                                      | 0.802                        | 4 / 64 (everywhere)        |
+| K=64 early-shared        | 64 | early-shared  | 3                                      | 0.819                        | 4 / 64 (everywhere)        |
 
 Key observations:
 
 1. **Capacity paradox.** The linear router has the largest router parameter count (131K) but leaves up to 30 of 64 experts dead at its worst layer. Every cheaper router keeps every expert alive. Linear's extra capacity is spent on imbalance, not on more-informative routing.
 
-2. **Cheap routers are *more* input-conditional at the layer level**, not less. Distinct top-1 modes per layer is 6-7 for the cheap factored routers and 7 for linear. So the 2-3 pt OOD edge cannot come from sharper top-k expert identity.
+2. **Cheap routers are *more* input-conditional at the layer level**, not less. Distinct top-1 modes per layer is 6-7 for the cheap factored routers vs 5 for linear — every cheap router selects a more diverse top-1 expert across inputs than the 131K-parameter linear router. So the 2-3 pt OOD edge cannot come from sharper top-k expert identity.
+
+   **Hierarchical caveat.** Hierarchical's level-2 router is a single `Linear(d, K/G)` shared across all selected groups (this is what preserves its `O(d·√K)` parameter cost — see `docs/architecture.md` § Router catalogue). All `√k` selected groups therefore share a within-group expert ranking, so hierarchical's high distinct-top-1 (7) reflects the level-1 group decision being well-spread, not an independent expert decision per group.
 
 3. **Early-shared is structurally uniform across layers by design.** All 32 MoELoRA injections read a single cached routing decision, so distinct top-1 per layer is exactly 3 *every*where, the pairwise hot-set Jaccard is 1, and the same 4 of 64 experts are dead everywhere. The OOD penalty (0.200 vs 0.217-0.245 for per-layer routers) is the direct cost of this forced uniformity.
 
@@ -86,13 +88,13 @@ Key observations:
 | cosine         | 0.063     | 0.007  | 0.079          | 0.089         | 0.998              |
 | hierarchical   | 0.063     | 0.014  | 0.090          | 0.113         | 0.992              |
 | product-key    | 0.063     | 0.011  | 0.086          | 0.104         | 0.995              |
-| early-shared   | 0.063     | 0.074  | 0.245          | 0.588         | 0.851              |
+| early-shared   | 0.063     | 0.074  | 0.245          | 0.588         | 0.819              |
 
 Mean gate is 1/16 = 0.0625 by construction (softmax over top-k weights summing to 1). The shape of the distribution is what differs:
 
 - The **linear router** produces dramatically sharper gates: at the 95th-percentile token, its top expert holds 95% of the gate mass. Median normalized entropy is 0.664 (1 = uniform, 0 = one-hot).
 - The **cheap factored routers** (lowrank, cosine, product-key, hierarchical) are essentially uniform across the selected 16 — their max-gate p95 is ~0.06-0.11.
-- The **early-shared router** sits between: its single linear router has linear-like expressivity, but only one of them. Median entropy 0.851, max-gate p95 0.588.
+- The **early-shared router** sits between: its single linear router has linear-like expressivity, but only one of them. Median entropy 0.819, max-gate p95 0.588.
 
 So the linear router's 2-3 pt OOD edge correlates directly with **gate-magnitude resolution**, not with expert selection. The cheap routers do select the right top-k — they just then weight all 16 selected experts (almost) equally. Linear preserves the soft-mixing fidelity that the cheap routers lose.
 

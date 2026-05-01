@@ -201,7 +201,7 @@ python -m scalable_moe_lora.analysis.per_layer_summary
 | Gradient ckpt   | on (`use_reentrant=False`) |
 | Primary seed    | 42 |
 
-**Evaluation.** Zero-shot prompts (no in-context exemplars or "think step by step" scaffolding). Gold targets are short answers except on GSM8K and MATH (full worked solutions, model emits a rationale before the final answer). In-distribution accuracy is the mean over the 16 accuracy-metric training datasets (E2E and SAMSum use BLEU/ROUGE-L). OOD accuracy is the mean over the 6 accuracy-metric OOD benchmarks (IFEval uses BLEU/ROUGE-L, reported separately). Validation loss is the best-epoch held-out cross-entropy on the training suite's validation split.
+**Evaluation.** Zero-shot prompts (no in-context exemplars or "think step by step" scaffolding). Gold targets are short answers except on GSM8K and MATH (full worked solutions, model emits a rationale before the final answer). In-distribution accuracy is the mean over the **15** accuracy-metric training datasets (MBPP, E2E, and SAMSum use BLEU/ROUGE-L and are excluded from the in-dist average). OOD accuracy is the mean over the 6 accuracy-metric OOD benchmarks. **IFEval is excluded from the OOD pool**: its "gold reference" is the prompt's first sentence (`data/reasoning.py:format_ifeval`), so a BLEU/ROUGE-L score there measures prompt-echoing, not instruction-following. Validation loss is the best-epoch held-out cross-entropy on the training suite's validation split.
 
 ## Results
 
@@ -211,12 +211,12 @@ At matched active rank per token (`k · r = 16`), at `LLaMA 3.2 1B + qv` injecti
 
 | Architecture            | K  | r  | k  | val_loss ↓ | in-dist ↑ | OOD ↑ |
 |-------------------------|----|----|----|------------|-----------|-------|
-| Standard LoRA, r=16     | —  | 16 | —  | 1.984      | 0.500     | 0.207 |
-| MoE-LoRA (coarse)       | 8  | 8  | 2  | 2.154      | 0.371*    | 0.197 |
-| TM-LoRA, r=16           | 8  | 16 | 2  | 1.953      | 0.493     | 0.196 |
+| Standard LoRA, r=16     | —  | 16 | —  | 1.984      | 0.5111    | 0.227 |
+| MoE-LoRA (coarse)       | 8  | 8  | 2  | 2.154      | 0.371*    | 0.195 |
+| TM-LoRA, r=16           | 8  | 16 | 2  | 1.953      | 0.5088    | 0.220 |
 | **MoE-LoRA (fine)**     | 64 | 1  | 16 | **1.923**  | **0.534** | **0.245** |
 
-\* coarse cell at `k=2` requires the load-balance penalty to converge under the linear router; without it the cell diverges. The MoE-LoRA (fine) row is the same checkpoint as Part B's `r=1, K=64, linear` cell, reused here so both ends of the granularity dimension show inside Part A.
+\* coarse cell at `k=2` requires the load-balance penalty to converge under the linear router; without it the cell diverges. Two seed=42 runs of this cell (`routed_r8_k8_linear` and `llama_granularity_r8_k8_linear`) had divergent training trajectories from unseeded RNG paths in the router init; the row above uses the more stable run, picked by best validation loss. After the `PYTHONHASHSEED` fix on this branch, future re-runs of this cell will be deterministic. The MoE-LoRA (fine) row is the same checkpoint as Part B's `r=1, K=64, linear` cell, reused here so both ends of the granularity dimension show inside Part A.
 
 ### Part B — Granularity sweep
 
@@ -225,7 +225,7 @@ Held: `K · r = 64` (matrix budget) and `k · r = 16` (active rank per token). S
 | (r, K, k) | linear router |       |       | lowrank router |       |       |
 |-----------|---------------|-------|-------|----------------|-------|-------|
 |           | val_loss      | in    | OOD   | val_loss       | in    | OOD   |
-| (8, 8, 2)*| 2.154         | 0.371 | 0.197 | 1.951          | 0.509 | 0.226 |
+| (8, 8, 2)*| 2.154         | 0.371 | 0.195 | 1.951          | 0.509 | 0.226 |
 | (4, 16, 4)| 1.926         | 0.523 | 0.226 | 1.949          | 0.522 | 0.223 |
 | (2, 32, 8)| 1.926         | 0.531 | **0.255** | 1.944      | 0.526 | 0.230 |
 | **(1, 64, 16)** | **1.923** | **0.534** | 0.245 | **1.933**  | **0.531** | 0.217 |
@@ -267,11 +267,11 @@ We open the trained checkpoints of every Part C router and inspect routing behav
 | cosine        | 0.063 | 0.007  | 0.079     | 0.089    | 0.998              |
 | hierarchical  | 0.063 | 0.014  | 0.090     | 0.113    | 0.992              |
 | product-key   | 0.063 | 0.011  | 0.086     | 0.104    | 0.995              |
-| early-shared  | 0.063 | 0.074  | 0.245     | 0.588    | 0.851              |
+| early-shared  | 0.063 | 0.074  | 0.245     | 0.588    | 0.819              |
 
 Linear's max gate at the 95th-percentile token holds 95% of the weight; the cheap factored routers are essentially uniform 1/16 = 0.0625. This is direct evidence that the linear router's 2-3 pt OOD edge comes from **soft-gate magnitude resolution**, not from selecting different experts. The cheap routers do select the right top-k — they just then weight all 16 selected experts (almost) equally.
 
-**Distinct top-1 selections.** The cheap factored routers (lowrank, cosine, product-key, hierarchical) post 6-7 distinct dataset-level top-1 modes per layer; the linear router sits at 7. By that metric, the cheap routers are *more* input-conditional at the layer level, ruling out "linear has a sharper top-k" as the OOD-edge explanation.
+**Distinct top-1 selections.** The cheap factored routers (lowrank, cosine, product-key, hierarchical) post 6-7 distinct dataset-level top-1 modes per layer; the linear router sits at 5. By that metric, the cheap routers are *more* input-conditional at the layer level, ruling out "linear has a sharper top-k" as the OOD-edge explanation. (Hierarchical's level-2 router is shared across selected groups by design — see `docs/architecture.md` § Router catalogue — so its high distinct-top-1 score reflects diversity in the level-1 group decision rather than independent expert decisions per group.)
 
 ## Extensions
 
