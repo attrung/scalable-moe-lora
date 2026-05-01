@@ -96,19 +96,27 @@ class MoELoRA(nn.Module):
         gate.scatter_(-1, topk_idx, topk_weights)
 
         # Load-balance aux loss (Switch Transformer): K · sum_i f_i · p_i.
-        flat_topk = topk_idx.reshape(-1, self.top_k)
-        onehot = torch.zeros(flat_topk.shape[0], K, device=x.device, dtype=topk_weights.dtype)
-        onehot.scatter_(1, flat_topk, 1.0)
-        f = onehot.mean(0)
-        if full_scores is not None:
-            p = F.softmax(full_scores.reshape(-1, K), dim=-1).mean(0)
+        # EarlySharedRouter followers reuse the owner's routing decision verbatim,
+        # so their (f, p) is identical to the owner's. Counting it again would
+        # multiply the effective aux_loss_coef by the number of injection sites
+        # (32× at qv on a 16-layer model). Followers set _last_aux_loss=None;
+        # collect_aux_loss skips them.
+        if getattr(self.router, "is_owner", True):
+            flat_topk = topk_idx.reshape(-1, self.top_k)
+            onehot = torch.zeros(flat_topk.shape[0], K, device=x.device, dtype=topk_weights.dtype)
+            onehot.scatter_(1, flat_topk, 1.0)
+            f = onehot.mean(0)
+            if full_scores is not None:
+                p = F.softmax(full_scores.reshape(-1, K), dim=-1).mean(0)
+            else:
+                # hierarchical router doesn't expose full K-wide scores; fall back to
+                # top-k softmax weights scattered to K (approximate but valid signal).
+                p_onehot = torch.zeros_like(onehot)
+                p_onehot.scatter_(1, flat_topk, topk_weights.reshape(-1, self.top_k))
+                p = p_onehot.mean(0)
+            self._last_aux_loss = K * (f * p).sum()
         else:
-            # hierarchical router doesn't expose full K-wide scores; fall back to
-            # top-k softmax weights scattered to K (approximate but valid signal).
-            p_onehot = torch.zeros_like(onehot)
-            p_onehot.scatter_(1, flat_topk, topk_weights.reshape(-1, self.top_k))
-            p = p_onehot.mean(0)
-        self._last_aux_loss = K * (f * p).sum()
+            self._last_aux_loss = None
 
         z_gated = z * gate.unsqueeze(-1)                       # (B, S, K, r)
         z_flat = z_gated.flatten(start_dim=-2)                  # (B, S, Kr)

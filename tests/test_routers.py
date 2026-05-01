@@ -97,6 +97,41 @@ def test_routed_lora_forward_backward():
     assert layer.B.weight.grad is not None
 
 
+def test_early_shared_aux_loss_owner_only():
+    """EarlySharedRouter followers reuse the owner's routing decision verbatim,
+    so they must NOT contribute aux-loss (otherwise the effective coefficient
+    is multiplied by the number of injection sites). After the fix, summed
+    aux loss across N MoELoRAs sharing one owner equals the owner's aux loss."""
+    from scalable_moe_lora.adapters import collect_aux_loss
+    torch.manual_seed(0)
+    d, K, k, N = 64, 64, 16, 4
+
+    # Build N MoELoRA modules wired the way build_model wires real layers:
+    # the first router instance is the owner; the rest follow it.
+    layers = nn.ModuleList([
+        MoELoRA(d, d, rank=1, alpha=32, num_experts=K, top_k=k, router_type="early_shared")
+        for _ in range(N)
+    ])
+    owner = layers[0].router
+    for i in range(1, N):
+        layers[i].router.is_owner = False
+        object.__setattr__(layers[i].router, "_owner_ref", owner)
+
+    x = torch.randn(2, 8, d)
+    for layer in layers:
+        layer(x)
+
+    owner_aux = layers[0]._last_aux_loss
+    follower_aux = [layers[i]._last_aux_loss for i in range(1, N)]
+    assert owner_aux is not None
+    assert all(a is None for a in follower_aux), "followers must emit None aux loss"
+
+    summed = collect_aux_loss(layers).item()
+    assert abs(summed - owner_aux.item()) < 1e-6, (
+        f"early_shared total aux ({summed}) must equal owner-only ({owner_aux.item()})"
+    )
+
+
 def test_temperature_router_invariants():
     """product_key_temp: tau scales gate magnitudes but leaves top-k selection
     and full_scores invariant."""
