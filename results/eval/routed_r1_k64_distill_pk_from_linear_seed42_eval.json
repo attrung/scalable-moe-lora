@@ -1,0 +1,61 @@
+{
+  "metrics": {
+    "gsm8k": {
+      "accuracy": 0.09173616376042457
+    },
+    "arc": {
+      "accuracy": 0.5691126279863481
+    },
+    "commonsenseqa": {
+      "accuracy": 0.6486486486486487
+    },
+    "piqa": {
+      "accuracy": 0.7383025027203483
+    },
+    "winogrande": {
+      "accuracy": 0.6716653512233622
+    },
+    "boolq": {
+      "accuracy": 0.7648318042813456
+    },
+    "hellaswag": {
+      "accuracy": 0.8221469826727743
+    },
+    "math": {
+      "accuracy": 0.0306
+    },
+    "openbookqa": {
+      "accuracy": 0.68
+    },
+    "sciq": {
+      "accuracy": 0.825
+    },
+    "mbpp": {
+      "bleu": 0.07033986212470315,
+      "rougeL": 0.46093074222228825
+    },
+    "logiqa2": {
+      "accuracy": 0.37150127226463103
+    },
+    "drop": {
+      "accuracy": 0.39480354879594426
+    },
+    "mmlu_aux": {
+      "accuracy": 0.49232787804731476
+    },
+    "triviaqa": {
+      "accuracy": 0.33890746934225197
+    },
+    "anli": {
+      "accuracy": 0.4558333333333333
+    },
+    "e2e": {
+      "bleu": 0.5648486315648882,
+      "rougeL": 0.6576793887940878
+    },
+    "samsum": {
+      "bleu": 0.0920364954067248,
+      "rougeL": 0.37188155386318655
+    }
+  }
+}
