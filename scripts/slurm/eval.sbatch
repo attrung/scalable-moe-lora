@@ -34,6 +34,9 @@ ACTIVATE="${ACTIVATE:-$REPO_ROOT/venv/bin/activate}"
 [ -f "$ACTIVATE" ] && source "$ACTIVATE"
 cd "$REPO_ROOT"
 
+# Match training: deterministic option layout in sciq / gpqa_diamond.
+export PYTHONHASHSEED=0
+
 OUTPUT="${OUTPUT:-${CKPT%.pt}_eval.json}"
 EXTRA=""
 [ "$OOD" = "yes" ]     && EXTRA="$EXTRA --eval_datasets $OOD_DATASETS"

@@ -8,6 +8,10 @@ import numpy as np
 
 
 def set_seed(seed):
+    # PYTHONHASHSEED affects hash() — used in data/reasoning.py format_sciq /
+    # format_gpqa_diamond to place the correct answer deterministically. Without
+    # this, eval/train runs across processes see different option layouts.
+    os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

@@ -20,6 +20,9 @@ shift $(( $# >= 2 ? 2 : 1 ))
 
 DATASETS="${DATASETS:-gsm8k,arc,commonsenseqa,piqa,winogrande,boolq,hellaswag,math,openbookqa,sciq,mbpp,logiqa2,drop,mmlu_aux,triviaqa,anli,e2e,samsum}"
 
+# Set before python starts: hash randomization is fixed at interpreter start.
+export PYTHONHASHSEED=0
+
 python -m scalable_moe_lora.train_reasoning \
     --config "$CONFIG" \
     --datasets "$DATASETS" \

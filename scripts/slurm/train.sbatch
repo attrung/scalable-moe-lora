@@ -36,6 +36,11 @@ ACTIVATE="${ACTIVATE:-$REPO_ROOT/venv/bin/activate}"
 cd "$REPO_ROOT"
 mkdir -p results/{logs,checkpoints}
 
+# PYTHONHASHSEED must be set before the python process starts; in-process
+# os.environ assignment is too late (Python's hash randomization is fixed at
+# interpreter start). Affects sciq/gpqa_diamond option placement.
+export PYTHONHASHSEED=0
+
 EXTRA=""
 [ -n "$RESUME_FROM" ] && EXTRA="--resume_from $RESUME_FROM"
 

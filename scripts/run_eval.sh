@@ -25,6 +25,8 @@ shift $(( $# >= 3 ? 3 : 2 ))
 DATASETS="${DATASETS:-gsm8k,arc,commonsenseqa,piqa,winogrande,boolq,hellaswag,math,openbookqa,sciq,mbpp,logiqa2,drop,mmlu_aux,triviaqa,anli,e2e,samsum}"
 OUTPUT="${OUTPUT:-${CKPT%.pt}_eval.json}"
 
+export PYTHONHASHSEED=0
+
 python -m scalable_moe_lora.evaluate_reasoning \
     --config "$CONFIG" \
     --checkpoint "$CKPT" \
