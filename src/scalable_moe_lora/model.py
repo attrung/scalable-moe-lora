@@ -57,6 +57,7 @@ def _get_lora_kwargs(config):
             "router_dim":  config.get("router_dim", 16),
             "num_heads":   config.get("num_heads", 4),
             "gate_rank":   config.get("gate_rank", 16),
+            "router_init": config.get("router_init", "default"),
         }
     if lora_type == "tm":
         return {

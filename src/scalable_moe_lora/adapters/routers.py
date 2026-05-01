@@ -33,13 +33,38 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class LinearRouter(nn.Module):
-    """scores = Linear(d, K)(x), then top-k + softmax."""
+def _apply_router_init(linear_or_param, kind):
+    """Optional router init override.
+      - 'default'      : leave PyTorch / caller-set init alone.
+      - 'kaiming'      : kaiming-uniform on the weight (or .weight if Linear).
+      - 'small_randn'  : N(0, 0.01) — same scale as LowRankRouter.keys default.
+    """
+    w = linear_or_param.weight if hasattr(linear_or_param, "weight") else linear_or_param
+    if kind == "default":
+        return
+    if kind == "kaiming":
+        nn.init.kaiming_uniform_(w, a=5 ** 0.5)
+        return
+    if kind == "small_randn":
+        nn.init.normal_(w, mean=0.0, std=0.01)
+        return
+    raise ValueError(f"unknown router_init {kind!r}")
 
-    def __init__(self, d, num_experts, top_k, **kwargs):
+
+class LinearRouter(nn.Module):
+    """scores = Linear(d, K)(x), then top-k + softmax.
+
+    `router_init` (default 'default'): override the bare Linear init. PyTorch's
+    default is kaiming-uniform with a=sqrt(5); 'small_randn' applies
+    N(0, 0.01) — useful as an ablation on whether linear's gate-fidelity edge
+    is initialization-driven.
+    """
+
+    def __init__(self, d, num_experts, top_k, router_init="default", **kwargs):
         super().__init__()
         self.top_k = top_k
         self.router = nn.Linear(d, num_experts, bias=False)
+        _apply_router_init(self.router, router_init)
 
     def forward(self, x):
         scores = self.router(x)
@@ -48,13 +73,19 @@ class LinearRouter(nn.Module):
 
 
 class LowRankRouter(nn.Module):
-    """scores = (W_query(x)) @ keys^T, where W_query: d -> r_R and keys: (K, r_R)."""
+    """scores = (W_query(x)) @ keys^T, where W_query: d -> r_R and keys: (K, r_R).
 
-    def __init__(self, d, num_experts, top_k, router_dim=16, **kwargs):
+    `router_init` (default 'default') overrides W_query's init only; `keys` keep
+    their original N(0, 0.01) init. 'kaiming' tests whether lowrank's
+    coarser-than-linear gate-fidelity is partly an init-scale gap.
+    """
+
+    def __init__(self, d, num_experts, top_k, router_dim=16, router_init="default", **kwargs):
         super().__init__()
         self.top_k = top_k
         self.W_query = nn.Linear(d, router_dim, bias=False)
         self.keys = nn.Parameter(torch.randn(num_experts, router_dim) * 0.01)
+        _apply_router_init(self.W_query, router_init)
 
     def forward(self, x):
         q = self.W_query(x)
